@@ -16,7 +16,7 @@ _(nothing yet — pick something from below)_
 
 ## ✅ Done
 
-- Player that runs and double-jumps
+- Player that runs and triple-jumps
 - Platforms to jump between
 - Coins to collect, with a score
 - A "you win" screen when you get every coin

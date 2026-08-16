@@ -24,8 +24,8 @@ export const TUNING = {
     /** How hard the world pulls him down. Smaller = floaty. Try 300 for outer space. */
     gravity: 1200,
 
-    /** How many jumps before touching the ground again. 2 = double jump. Try 5. */
-    maxJumps: 2,
+    /** How many jumps before touching the ground again. 3 = triple jump. Try 5. */
+    maxJumps: 3,
 
     /** A little bounce when he lands. 0 = no bounce, 1 = rubber ball. */
     bounce: 0.1,
