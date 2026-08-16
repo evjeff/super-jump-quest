@@ -275,14 +275,20 @@ test('the level clock runs, stops at the finish, and the best time is remembered
   const atFinish = await levelTime(page)
   await page.waitForTimeout(500)
   expect(await levelTime(page)).toBe(atFinish)
-  expect(await hud(page)).toContain('BEST')
 
-  // The record outlives the page.
+  // The number written down has to be the number the clock showed. Take the
+  // time straight off the banner and insist the record matches it, so a game
+  // that remembers some other number entirely can't slip past.
+  const shown = (await banner(page)).match(/TIME (\d+:\d\d\.\d)/)?.[1] ?? ''
+  expect(shown).not.toBe('')
+  expect(await hud(page)).toContain(`BEST ${shown}`)
+
+  // The record outlives the page — and it's still the same number afterwards.
   const saved = await page.evaluate(() => localStorage.getItem('super-jump-quest.best-times'))
   expect(saved).toContain('First Steps')
   await page.reload()
   await waitForGameScene(page)
-  expect(await hud(page)).toContain('BEST')
+  expect(await hud(page)).toContain(`BEST ${shown}`)
 
   // ...and scribbled-over memory is forgotten rather than shown as NaN.
   await page.evaluate(() => localStorage.setItem('super-jump-quest.best-times', 'not json at all'))
