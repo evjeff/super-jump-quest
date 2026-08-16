@@ -39,6 +39,21 @@ export const TUNING = {
     spinSpeed: 90,
   },
 
+  sound: {
+    /** How loud the beeps are. 0 turns all sound OFF. 1 is as loud as it gets. */
+    volume: 0.35,
+
+    /**
+     * He bounces a tiny bit when he lands, and each bounce counts as landing
+     * again. Ignore extra thuds within this many milliseconds so one landing
+     * makes one noise. Bigger = fewer thuds.
+     *
+     * A bounce comes back down within ~180ms; two REAL landings are always at
+     * least ~800ms apart, so there's plenty of room between the two.
+     */
+    landingCooldownMs: 250,
+  },
+
   world: {
     width: 960,
     height: 540,

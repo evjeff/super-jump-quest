@@ -37,6 +37,7 @@ matters, each with a comment explaining what it does:
 | Floaty moon gravity | `player.gravity` | `300` |
 | Jump even more times | `player.maxJumps` | `5` |
 | A different colored sky | `colors.sky` | `0x2d1b4e` |
+| Turn the sound off | `sound.volume` | `0` |
 
 Nothing in that file can break the game. Try ridiculous numbers — that's the fun part.
 
@@ -52,8 +53,10 @@ Platforms and coins are just x/y numbers on a 960 × 540 grid, where `y` counts
 src/
 ├── tuning.ts        ← all the knobs (start here)
 ├── levels/          ← level layouts, as plain data
-├── game/            ← the RULES: jumping, scoring, movement
-│                      Pure functions. No Phaser. Fully unit tested.
+├── game/            ← the RULES: jumping, scoring, movement, what sounds
+│                      sound like. Pure functions. No Phaser. Unit tested.
+├── audio/           ← the only thing that makes noise. No sound files —
+│                      the computer plays the notes itself.
 ├── scenes/          ← the DRAWING: Phaser scenes, sprites, physics
 └── main.ts          ← starts the game
 ```

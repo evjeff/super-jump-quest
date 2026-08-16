@@ -37,6 +37,16 @@ export function registerJump(state: JumpState): JumpState {
   }
 }
 
+/**
+ * Did he touch down on THIS frame?
+ *
+ * Ask this before calling `syncGrounded`, while the state still remembers that
+ * he was in the air. It's the moment to play a landing sound or squash him.
+ */
+export function justLanded(state: JumpState, onGroundNow: boolean): boolean {
+  return onGroundNow && !state.onGround
+}
+
 /** Called every frame with whether the player is touching the ground. */
 export function syncGrounded(state: JumpState, onGround: boolean): JumpState {
   if (onGround && !state.onGround) {

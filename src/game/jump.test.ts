@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canJump, createJumpState, registerJump, syncGrounded } from './jump'
+import { canJump, createJumpState, justLanded, registerJump, syncGrounded } from './jump'
 
 describe('canJump', () => {
   it('allows a jump when standing on the ground', () => {
@@ -66,6 +66,24 @@ describe('syncGrounded', () => {
     const walkedOff = syncGrounded({ jumpsUsed: 0, onGround: true }, false)
     expect(walkedOff).toEqual({ jumpsUsed: 0, onGround: false })
     expect(canJump(walkedOff, 2)).toBe(true)
+  })
+})
+
+describe('justLanded', () => {
+  it('is true on the frame he touches down', () => {
+    expect(justLanded({ jumpsUsed: 2, onGround: false }, true)).toBe(true)
+  })
+
+  it('is false while he keeps standing there', () => {
+    expect(justLanded({ jumpsUsed: 0, onGround: true }, true)).toBe(false)
+  })
+
+  it('is false while he is still in the air', () => {
+    expect(justLanded({ jumpsUsed: 1, onGround: false }, false)).toBe(false)
+  })
+
+  it('is false when he leaves the ground', () => {
+    expect(justLanded({ jumpsUsed: 0, onGround: true }, false)).toBe(false)
   })
 })
 
