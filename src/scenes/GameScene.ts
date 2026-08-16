@@ -87,6 +87,14 @@ export class GameScene extends Phaser.Scene {
     // frozen mid-squash.
     this.drawPlayer()
 
+    // R always means the same thing, wherever you press it: back to the very
+    // beginning, score and all. Checked before anything else so a kid stuck on
+    // a hard jump can start over without reloading the page.
+    if (Phaser.Input.Keyboard.JustDown(this.restartKey)) {
+      this.scene.restart({ levelIndex: 0, points: 0 })
+      return
+    }
+
     if (this.outcome) {
       this.handleBannerKeys(this.outcome)
       return
@@ -99,16 +107,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * The two keys that work while the big banner is up.
-   *
-   * N carries the score forward into the next level. R always means the same
-   * thing wherever you press it: back to the very beginning, score and all.
+   * The extra key that only works while the big banner is up: N carries the
+   * score forward into the next level. (R is handled in `update`, because it
+   * works at any time.)
    */
   private handleBannerKeys(outcome: Progress): void {
-    if (Phaser.Input.Keyboard.JustDown(this.restartKey)) {
-      this.scene.restart({ levelIndex: 0, points: 0 })
-      return
-    }
     if (outcome.kind === 'next-level' && Phaser.Input.Keyboard.JustDown(this.nextLevelKey)) {
       this.scene.restart({ levelIndex: outcome.levelIndex, points: this.scoreState.points })
     }

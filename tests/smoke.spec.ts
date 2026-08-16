@@ -170,6 +170,10 @@ test('finishing a level starts the next one, and finishing the last one wins', a
   await collectEveryCoin(page)
   expect(await banner(page)).toContain('LEVEL 1 DONE!')
 
+  // The points he earned in level 1 have to travel with him into level 2.
+  const scoreAfterLevel1 = (await hud(page)).match(/SCORE \d+/)?.[0] ?? ''
+  expect(scoreAfterLevel1).not.toBe('SCORE 00000')
+
   // Phaser ignores a key that goes down and up inside one frame, so hold it.
   await holdKey(page, 'KeyN')
   await expect.poll(() => hud(page), { timeout: 5_000 }).toContain('LEVEL 2')
@@ -180,6 +184,7 @@ test('finishing a level starts the next one, and finishing the last one wins', a
   expect(level2.platforms).toBeGreaterThan(0)
   // Nothing leaks across: fresh coin count, fresh jumps, no leftover squash.
   expect(level2.hud).toContain('COINS 0/')
+  expect(level2.hud).toContain(scoreAfterLevel1)
   expect(level2.banner).toBe('')
   expect(level2.jumpsUsed).toBe(0)
   expect(level2.squashCleared).toBe(true)
@@ -192,6 +197,30 @@ test('finishing a level starts the next one, and finishing the last one wins', a
   expect(await hud(page)).toContain('SCORE 00000')
 
   expect(consoleErrors).toEqual([])
+})
+
+/**
+ * The page and the README both promise that R starts over. It has to work while
+ * he is still playing, not only on the win screen — being stuck on a hard jump
+ * with no way back except reloading the page is how a Saturday morning ends.
+ */
+test('R starts the game over in the middle of a level', async ({ page }) => {
+  await page.goto('/')
+  await expect
+    .poll(() => page.evaluate(() => window.__GAME__?.scene.isActive('Game') ?? false), {
+      timeout: 15_000,
+    })
+    .toBe(true)
+
+  // One coin, so there is something for the restart to wipe, and six left over
+  // so the level is still being played rather than finished.
+  await collectFirstCoin(page)
+  expect(await hud(page)).not.toContain('SCORE 00000')
+  expect(await banner(page)).toBe('')
+
+  await holdKey(page, 'KeyR')
+  await expect.poll(() => hud(page), { timeout: 5_000 }).toContain('SCORE 00000')
+  expect(await hud(page)).toContain('LEVEL 1')
 })
 
 declare global {
@@ -255,6 +284,22 @@ async function collectEveryCoin(page: import('@playwright/test').Page): Promise<
       await nextFrame()
       await nextFrame()
     }
+  })
+}
+
+/** Park him on the first coin only, leaving the rest of the level unfinished. */
+async function collectFirstCoin(page: import('@playwright/test').Page): Promise<void> {
+  await page.evaluate(async () => {
+    const scene = window.__GAME__?.scene.getScene('Game') as unknown as LevelProbe
+    const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
+    const coin = scene.coins.getChildren()[0]
+    // A level with no coins would leave the score at zero, and the check back
+    // in the test says so out loud rather than passing on an empty level.
+    if (!coin) return
+    scene.player.setVelocity(0, 0)
+    scene.player.setPosition(coin.x, coin.y)
+    await nextFrame()
+    await nextFrame()
   })
 }
 
