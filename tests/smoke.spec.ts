@@ -139,6 +139,90 @@ test('jumping actually plays a note', async ({ page }) => {
   expect(await notesPlayed(page)).toBeGreaterThan(notesBefore)
 })
 
+/**
+ * The guardrail for having more than one level.
+ *
+ * Finishing a level and walking into the next one is the one thing unit tests
+ * can't see: the rules are pure and tested, but only a real browser proves the
+ * second level actually builds itself, with its own platforms and coins and
+ * nothing left over from the level before.
+ *
+ * It plays the game by teleporting him onto each coin one frame at a time
+ * rather than by pressing keys, so it finishes in a second and always does the
+ * same thing.
+ */
+test('finishing a level starts the next one, and finishing the last one wins', async ({ page }) => {
+  const consoleErrors: string[] = []
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text())
+  })
+  page.on('pageerror', (error) => consoleErrors.push(error.message))
+
+  await page.goto('/')
+  await expect
+    .poll(() => page.evaluate(() => window.__GAME__?.scene.isActive('Game') ?? false), {
+      timeout: 15_000,
+    })
+    .toBe(true)
+
+  expect(await hud(page)).toContain('LEVEL 1')
+
+  await collectEveryCoin(page)
+  expect(await banner(page)).toContain('LEVEL 1 DONE!')
+
+  // The points he earned in level 1 have to travel with him into level 2.
+  const scoreAfterLevel1 = (await hud(page)).match(/SCORE \d+/)?.[0] ?? ''
+  expect(scoreAfterLevel1).not.toBe('SCORE 00000')
+
+  // Phaser ignores a key that goes down and up inside one frame, so hold it.
+  await holdKey(page, 'KeyN')
+  await expect.poll(() => hud(page), { timeout: 5_000 }).toContain('LEVEL 2')
+
+  const level2 = await levelState(page)
+  expect(level2.coinsAlive).toBe(level2.coinsInLevel)
+  expect(level2.coinsInLevel).toBeGreaterThan(0)
+  expect(level2.platforms).toBeGreaterThan(0)
+  // Nothing leaks across: fresh coin count, fresh jumps, no leftover squash.
+  expect(level2.hud).toContain('COINS 0/')
+  expect(level2.hud).toContain(scoreAfterLevel1)
+  expect(level2.banner).toBe('')
+  expect(level2.jumpsUsed).toBe(0)
+  expect(level2.squashCleared).toBe(true)
+
+  await collectEveryCoin(page)
+  expect(await banner(page)).toContain('YOU WIN!')
+
+  await holdKey(page, 'KeyR')
+  await expect.poll(() => hud(page), { timeout: 5_000 }).toContain('LEVEL 1')
+  expect(await hud(page)).toContain('SCORE 00000')
+
+  expect(consoleErrors).toEqual([])
+})
+
+/**
+ * The page and the README both promise that R starts over. It has to work while
+ * he is still playing, not only on the win screen — being stuck on a hard jump
+ * with no way back except reloading the page is how a Saturday morning ends.
+ */
+test('R starts the game over in the middle of a level', async ({ page }) => {
+  await page.goto('/')
+  await expect
+    .poll(() => page.evaluate(() => window.__GAME__?.scene.isActive('Game') ?? false), {
+      timeout: 15_000,
+    })
+    .toBe(true)
+
+  // One coin, so there is something for the restart to wipe, and six left over
+  // so the level is still being played rather than finished.
+  await collectFirstCoin(page)
+  expect(await hud(page)).not.toContain('SCORE 00000')
+  expect(await banner(page)).toBe('')
+
+  await holdKey(page, 'KeyR')
+  await expect.poll(() => hud(page), { timeout: 5_000 }).toContain('SCORE 00000')
+  expect(await hud(page)).toContain('LEVEL 1')
+})
+
 declare global {
   interface Window {
     /** Notes the browser was asked to play, counted by the audio test above. */
@@ -147,6 +231,83 @@ declare global {
 }
 
 type PlayerProbe = { player?: { y: number; body?: { blocked: { down: boolean } } } }
+
+type CoinSprite = { x: number; y: number; active: boolean; setPosition(x: number, y: number): void }
+type LevelProbe = {
+  player: { setVelocity(x: number, y: number): void } & CoinSprite
+  coins: { getChildren(): CoinSprite[] }
+  hud: { text: string }
+  banner: { text: string }
+  level: { coins: unknown[]; platforms: unknown[] }
+  jumpState: { jumpsUsed: number }
+  squashStartedAt: number
+}
+
+async function hud(page: import('@playwright/test').Page): Promise<string> {
+  return page.evaluate(() => {
+    const scene = window.__GAME__?.scene.getScene('Game') as unknown as LevelProbe
+    return scene.hud.text
+  })
+}
+
+async function banner(page: import('@playwright/test').Page): Promise<string> {
+  return page.evaluate(() => {
+    const scene = window.__GAME__?.scene.getScene('Game') as unknown as LevelProbe
+    return scene.banner.text
+  })
+}
+
+async function levelState(page: import('@playwright/test').Page) {
+  return page.evaluate(() => {
+    const scene = window.__GAME__?.scene.getScene('Game') as unknown as LevelProbe
+    return {
+      hud: scene.hud.text,
+      banner: scene.banner.text,
+      platforms: scene.level.platforms.length,
+      coinsInLevel: scene.level.coins.length,
+      coinsAlive: scene.coins.getChildren().filter((coin) => coin.active).length,
+      jumpsUsed: scene.jumpState.jumpsUsed,
+      squashCleared: scene.squashStartedAt === Number.NEGATIVE_INFINITY,
+    }
+  })
+}
+
+/** Finish a level without playing it: park him on each coin, one frame apart. */
+async function collectEveryCoin(page: import('@playwright/test').Page): Promise<void> {
+  await page.evaluate(async () => {
+    const scene = window.__GAME__?.scene.getScene('Game') as unknown as LevelProbe
+    const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
+    for (const coin of [...scene.coins.getChildren()]) {
+      if (!coin.active) continue
+      scene.player.setVelocity(0, 0)
+      scene.player.setPosition(coin.x, coin.y)
+      await nextFrame()
+      await nextFrame()
+    }
+  })
+}
+
+/** Park him on the first coin only, leaving the rest of the level unfinished. */
+async function collectFirstCoin(page: import('@playwright/test').Page): Promise<void> {
+  await page.evaluate(async () => {
+    const scene = window.__GAME__?.scene.getScene('Game') as unknown as LevelProbe
+    const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
+    const coin = scene.coins.getChildren()[0]
+    // A level with no coins would leave the score at zero, and the check back
+    // in the test says so out loud rather than passing on an empty level.
+    if (!coin) return
+    scene.player.setVelocity(0, 0)
+    scene.player.setPosition(coin.x, coin.y)
+    await nextFrame()
+    await nextFrame()
+  })
+}
+
+async function holdKey(page: import('@playwright/test').Page, key: string): Promise<void> {
+  await page.keyboard.down(key)
+  await page.waitForTimeout(80)
+  await page.keyboard.up(key)
+}
 
 async function notesPlayed(page: import('@playwright/test').Page): Promise<number> {
   return page.evaluate(() => window.__NOTES_PLAYED__ ?? 0)

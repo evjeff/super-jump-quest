@@ -7,8 +7,13 @@ export interface ScoreState {
   coinsCollected: number
 }
 
-export function createScoreState(): ScoreState {
-  return { points: 0, coinsCollected: 0 }
+/**
+ * A fresh score. `startingPoints` is the score carried in from an earlier
+ * level — the points keep adding up across the whole game, but the coin count
+ * starts again, because each level has its own coins to find.
+ */
+export function createScoreState(startingPoints = 0): ScoreState {
+  return { points: startingPoints, coinsCollected: 0 }
 }
 
 export function collectCoin(state: ScoreState, coinValue: number): ScoreState {

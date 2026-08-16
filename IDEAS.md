@@ -26,6 +26,10 @@ _(nothing yet — pick something from below)_
   finish, so winning sounds like winning
 - He squashes when he lands — goes wide and short for a moment, then springs
   back, so he feels heavy instead of like a sliding box
+- A second level, "The Tall Tower" — press N when you finish level 1 and you're
+  straight into it: a hole in the ground to jump across, a staircase climbing
+  into the sky, and one coin so high up that only a triple jump gets it. Your
+  score keeps counting up across both levels, and R starts the whole thing over
 
 ## 📋 Next up
 
@@ -33,7 +37,6 @@ _Good starting points — each is small enough to finish in one sitting._
 
 - [ ] A mute key, so the game can be played at bedtime
       (for now: set `sound.volume` to `0` in `src/tuning.ts`)
-- [ ] A second level, unlocked after finishing the first
 - [ ] Show a timer, and remember the best time
 
 ## 🌟 Someday / bigger

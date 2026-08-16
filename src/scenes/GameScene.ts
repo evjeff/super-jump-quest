@@ -4,15 +4,21 @@ import { createBeeper, webAudioOutput } from '../audio/beeper'
 import type { JumpState } from '../game/jump'
 import { canJump, createJumpState, justLanded, registerJump, syncGrounded } from '../game/jump'
 import { facingDirection, horizontalVelocity } from '../game/movement'
+import type { Progress } from '../game/progress'
+import { afterLevel, bannerText } from '../game/progress'
 import type { ScoreState } from '../game/score'
 import { collectCoin, createScoreState, formatScore, isLevelComplete } from '../game/score'
 import { coinSound, isDistinctLanding, jumpSound, landingSound, winSound } from '../game/sounds'
 import { squashScale } from '../game/squash'
-import type { Level } from '../levels/level1'
-import { LEVEL_1 } from '../levels/level1'
+import type { Level } from '../levels'
+import { LEVELS } from '../levels'
 import { TUNING } from '../tuning'
 
-const LEVEL: Level = LEVEL_1
+/** What one level hands to the next when you press N. */
+interface GameSceneData {
+  levelIndex?: number
+  points?: number
+}
 
 export class GameScene extends Phaser.Scene {
   private player!: Phaser.Physics.Arcade.Sprite
@@ -25,6 +31,7 @@ export class GameScene extends Phaser.Scene {
   private rightKeys: Phaser.Input.Keyboard.Key[] = []
   private jumpKeys: Phaser.Input.Keyboard.Key[] = []
   private restartKey!: Phaser.Input.Keyboard.Key
+  private nextLevelKey!: Phaser.Input.Keyboard.Key
 
   private beeper: Beeper = createBeeper(null, 0)
 
@@ -34,14 +41,38 @@ export class GameScene extends Phaser.Scene {
   private lastLandingAt = 0
   /** When he last touched down. Infinitely long ago means "not squashed". */
   private squashStartedAt = Number.NEGATIVE_INFINITY
-  private won = false
+  /** Null while he's still playing; set the moment the last coin is grabbed. */
+  private outcome: Progress | null = null
+
+  /** Which level he's on, counting from 0. Level 0 is the one people call 1. */
+  private levelIndex = 0
+  private level: Level = LEVELS[0]
+  /** The score he arrived with, so points keep adding up across levels. */
+  private startingPoints = 0
 
   constructor() {
     super('Game')
   }
 
+  /** Phaser hands us whatever `scene.restart(...)` was called with. */
+  init(data: GameSceneData): void {
+    this.levelIndex = data.levelIndex ?? 0
+    this.level = LEVELS[this.levelIndex] ?? LEVELS[0]
+    this.startingPoints = data.points ?? 0
+  }
+
   create(): void {
     this.cameras.main.setBackgroundColor(TUNING.colors.sky)
+
+    // Wipe the last level's state FIRST, so everything below is built from a
+    // clean slate. (The HUD in particular is drawn straight from the score, and
+    // level 2 opening on "COINS 7/11" is exactly the kind of leak this stops.)
+    this.jumpState = createJumpState()
+    this.scoreState = createScoreState(this.startingPoints)
+    this.facing = 'right'
+    this.lastLandingAt = 0
+    this.squashStartedAt = Number.NEGATIVE_INFINITY
+    this.outcome = null
 
     this.buildPlatforms()
     this.buildPlayer()
@@ -49,14 +80,6 @@ export class GameScene extends Phaser.Scene {
     this.buildHud()
     this.bindKeys()
     this.beeper = createBeeper(webAudioOutput(this.sound), TUNING.sound.volume)
-
-    // Reset per-restart state so `scene.restart()` is always a clean slate.
-    this.jumpState = createJumpState()
-    this.scoreState = createScoreState()
-    this.facing = 'right'
-    this.lastLandingAt = 0
-    this.squashStartedAt = Number.NEGATIVE_INFINITY
-    this.won = false
   }
 
   override update(): void {
@@ -64,8 +87,16 @@ export class GameScene extends Phaser.Scene {
     // frozen mid-squash.
     this.drawPlayer()
 
-    if (this.won) {
-      if (Phaser.Input.Keyboard.JustDown(this.restartKey)) this.scene.restart()
+    // R always means the same thing, wherever you press it: back to the very
+    // beginning, score and all. Checked before anything else so a kid stuck on
+    // a hard jump can start over without reloading the page.
+    if (Phaser.Input.Keyboard.JustDown(this.restartKey)) {
+      this.scene.restart({ levelIndex: 0, points: 0 })
+      return
+    }
+
+    if (this.outcome) {
+      this.handleBannerKeys(this.outcome)
       return
     }
 
@@ -75,11 +106,22 @@ export class GameScene extends Phaser.Scene {
     this.spinCoins()
   }
 
+  /**
+   * The extra key that only works while the big banner is up: N carries the
+   * score forward into the next level. (R is handled in `update`, because it
+   * works at any time.)
+   */
+  private handleBannerKeys(outcome: Progress): void {
+    if (outcome.kind === 'next-level' && Phaser.Input.Keyboard.JustDown(this.nextLevelKey)) {
+      this.scene.restart({ levelIndex: outcome.levelIndex, points: this.scoreState.points })
+    }
+  }
+
   // --- setup -------------------------------------------------------------
 
   private buildPlatforms(): void {
     const platforms = this.physics.add.staticGroup()
-    for (const spec of LEVEL.platforms) {
+    for (const spec of this.level.platforms) {
       const block = platforms.create(spec.x, spec.y, 'platform') as Phaser.Physics.Arcade.Sprite
       block.setDisplaySize(spec.width, spec.height)
       block.refreshBody()
@@ -89,7 +131,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private buildPlayer(): void {
-    const { playerStart } = LEVEL
+    const { playerStart } = this.level
     this.player = this.physics.add.sprite(playerStart.x, playerStart.y, 'player')
     this.player.setBounce(TUNING.player.bounce)
     this.player.setCollideWorldBounds(false)
@@ -113,7 +155,7 @@ export class GameScene extends Phaser.Scene {
 
   private buildCoins(): void {
     this.coins = this.physics.add.group({ allowGravity: false, immovable: true })
-    for (const spec of LEVEL.coins) {
+    for (const spec of this.level.coins) {
       this.coins.create(spec.x, spec.y, 'coin')
     }
 
@@ -157,6 +199,7 @@ export class GameScene extends Phaser.Scene {
       keyboard.addKey(KeyCodes.W),
     ]
     this.restartKey = keyboard.addKey(KeyCodes.R)
+    this.nextLevelKey = keyboard.addKey(KeyCodes.N)
   }
 
   // --- per-frame behaviour ------------------------------------------------
@@ -221,7 +264,7 @@ export class GameScene extends Phaser.Scene {
 
   private handleFalling(): void {
     if (this.player.y > TUNING.world.deathDepth) {
-      this.player.setPosition(LEVEL.playerStart.x, LEVEL.playerStart.y)
+      this.player.setPosition(this.level.playerStart.x, this.level.playerStart.y)
       this.player.setVelocity(0, 0)
       this.jumpState = createJumpState()
       // Start the new life at his normal shape, not stuck mid-squash.
@@ -245,23 +288,28 @@ export class GameScene extends Phaser.Scene {
     this.scoreState = collectCoin(this.scoreState, TUNING.coins.value)
     this.refreshHud()
 
-    if (isLevelComplete(this.scoreState, LEVEL.coins.length)) {
-      this.won = true
+    if (isLevelComplete(this.scoreState, this.level.coins.length)) {
+      const outcome = afterLevel(this.levelIndex, LEVELS.length)
+      this.outcome = outcome
       this.player.setVelocity(0, 0)
-      this.banner.setText('YOU WIN!\npress R to play again')
+      this.banner.setText(bannerText(outcome))
       // Only reachable by picking up the last coin, and every coin is switched
-      // off by then — so the fanfare plays once per win, never twice. Pressing R
-      // runs create() again, which puts the coins back and clears `won`, so the
-      // next win cheers too.
-      this.beeper.play(winSound())
+      // off by then — so the fanfare plays once per win, never twice. Starting a
+      // level runs create() again, which puts the coins back and clears
+      // `outcome`, so the next win cheers too.
+      if (outcome.kind === 'game-complete') this.beeper.play(winSound())
     }
   }
 
   private refreshHud(): void {
-    const total = LEVEL.coins.length
-    this.hud.setText(
+    const total = this.level.coins.length
+    // Two short lines, not one long one. Adding the level name made a single
+    // line stretch two thirds of the way across the screen, far enough to be
+    // drawn on top of him whenever he was up high on the left-hand side.
+    this.hud.setText([
+      `LEVEL ${this.levelIndex + 1} ${this.level.name}`,
       `SCORE ${formatScore(this.scoreState.points)}   COINS ${this.scoreState.coinsCollected}/${total}`,
-    )
+    ])
   }
 }
 

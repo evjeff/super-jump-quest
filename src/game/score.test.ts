@@ -6,6 +6,11 @@ describe('collectCoin', () => {
     expect(createScoreState()).toEqual({ points: 0, coinsCollected: 0 })
   })
 
+  it('can start from the score carried in from an earlier level', () => {
+    // A new level means new coins to find, but the same running score.
+    expect(createScoreState(70)).toEqual({ points: 70, coinsCollected: 0 })
+  })
+
   it('adds the coin value and counts the coin', () => {
     const state = collectCoin(createScoreState(), 10)
     expect(state).toEqual({ points: 10, coinsCollected: 1 })

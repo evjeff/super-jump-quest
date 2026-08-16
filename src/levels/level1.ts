@@ -10,27 +10,11 @@
  *
  * x and y are the CENTER of the thing you're placing.
  *
- * To build a new level: copy this file, rename it, change the numbers.
+ * To build a new level: copy this file, rename it, change the numbers, then
+ * add it to the list in `index.ts`.
  */
 
-export interface Platform {
-  x: number
-  y: number
-  width: number
-  height: number
-}
-
-export interface Coin {
-  x: number
-  y: number
-}
-
-export interface Level {
-  name: string
-  playerStart: { x: number; y: number }
-  platforms: Platform[]
-  coins: Coin[]
-}
+import type { Level } from './index'
 
 export const LEVEL_1: Level = {
   name: 'First Steps',
