@@ -24,6 +24,8 @@ _(nothing yet — pick something from below)_
   jump sounds a step higher than the last, so you can hear when you're out
 - A little "ta-da!" fanfare when you win — four notes climbing up to a big
   finish, so winning sounds like winning
+- He squashes when he lands — goes wide and short for a moment, then springs
+  back, so he feels heavy instead of like a sliding box
 
 ## 📋 Next up
 
@@ -31,7 +33,6 @@ _Good starting points — each is small enough to finish in one sitting._
 
 - [ ] A mute key, so the game can be played at bedtime
       (for now: set `sound.volume` to `0` in `src/tuning.ts`)
-- [ ] Make the player squash a little when he lands
 - [ ] A second level, unlocked after finishing the first
 - [ ] Show a timer, and remember the best time
 
