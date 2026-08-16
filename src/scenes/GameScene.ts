@@ -191,10 +191,12 @@ export class GameScene extends Phaser.Scene {
 
     // Ask before syncing, while the state still remembers he was airborne.
     if (justLanded(this.jumpState, onGround)) {
-      // He squashes on EVERY touchdown, including the little bounces — unlike
-      // the thud, which is debounced. Three thuds in a row sound like a bug;
-      // three shrinking squashes LOOK like something bouncing, which is what
-      // he's doing. It also means he can never be left mid-squash.
+      // He squashes on EVERY touchdown, including the little bounces after
+      // the first one — unlike the thud, which is debounced, because three
+      // thuds in a row sound like a bug. Every squash is the same depth: a
+      // gentle bounce flattens him just as much as a long drop, so a bounce
+      // re-flattens him part-way through springing back. Restarting it on
+      // every touchdown does mean he can never be left stuck mid-squash.
       this.squashStartedAt = this.time.now
       this.playLanding()
     }
