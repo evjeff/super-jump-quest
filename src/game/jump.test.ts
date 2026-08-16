@@ -69,6 +69,39 @@ describe('syncGrounded', () => {
   })
 })
 
+describe('a full triple jump sequence', () => {
+  it('allows exactly three jumps between landings', () => {
+    let state = createJumpState()
+    state = syncGrounded(state, true)
+
+    // Off the ground...
+    expect(canJump(state, 3)).toBe(true)
+    state = registerJump(state)
+
+    // ...then two more in mid-air...
+    expect(canJump(state, 3)).toBe(true)
+    state = registerJump(state)
+
+    expect(canJump(state, 3)).toBe(true)
+    state = registerJump(state)
+
+    // ...and that's the lot until he touches something.
+    expect(canJump(state, 3)).toBe(false)
+
+    state = syncGrounded(state, true)
+    expect(canJump(state, 3)).toBe(true)
+  })
+
+  it('gives a third jump to someone who walked off a ledge and jumped twice', () => {
+    let state = syncGrounded(createJumpState(), true)
+    state = syncGrounded(state, false) // stepped off the edge, no jump spent
+    state = registerJump(state)
+    state = registerJump(state)
+
+    expect(canJump(state, 3)).toBe(true)
+  })
+})
+
 describe('a full double jump sequence', () => {
   it('allows exactly two jumps between landings', () => {
     let state = createJumpState()

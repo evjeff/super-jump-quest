@@ -20,8 +20,8 @@ pnpm dev
 Then open http://localhost:5173. Edit a file, hit save, and the browser updates
 instantly — no refresh needed.
 
-**Controls:** arrows or WASD to move, space to jump, space again to double-jump,
-`R` to restart after you win.
+**Controls:** arrows or WASD to move, space to jump — and space twice more in
+mid-air for a triple jump. `R` restarts after you win.
 
 ---
 
@@ -35,7 +35,7 @@ matters, each with a comment explaining what it does:
 | Jump higher | `player.jumpVelocity` | `900` |
 | Run faster | `player.speed` | `400` |
 | Floaty moon gravity | `player.gravity` | `300` |
-| Triple jump | `player.maxJumps` | `3` |
+| Jump even more times | `player.maxJumps` | `5` |
 | A different colored sky | `colors.sky` | `0x2d1b4e` |
 
 Nothing in that file can break the game. Try ridiculous numbers — that's the fun part.
