@@ -6,7 +6,7 @@ import { canJump, createJumpState, justLanded, registerJump, syncGrounded } from
 import { facingDirection, horizontalVelocity } from '../game/movement'
 import type { ScoreState } from '../game/score'
 import { collectCoin, createScoreState, formatScore, isLevelComplete } from '../game/score'
-import { coinSound, isDistinctLanding, jumpSound, landingSound } from '../game/sounds'
+import { coinSound, isDistinctLanding, jumpSound, landingSound, winSound } from '../game/sounds'
 import type { Level } from '../levels/level1'
 import { LEVEL_1 } from '../levels/level1'
 import { TUNING } from '../tuning'
@@ -204,6 +204,11 @@ export class GameScene extends Phaser.Scene {
       this.won = true
       this.player.setVelocity(0, 0)
       this.banner.setText('YOU WIN!\npress R to play again')
+      // Only reachable by picking up the last coin, and every coin is switched
+      // off by then — so the fanfare plays once per win, never twice. Pressing R
+      // runs create() again, which puts the coins back and clears `won`, so the
+      // next win cheers too.
+      this.beeper.play(winSound())
     }
   }
 
