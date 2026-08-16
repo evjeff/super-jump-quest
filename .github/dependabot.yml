@@ -21,3 +21,7 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    groups:
+      # Without this, five stale actions means five separate PRs.
+      actions:
+        patterns: ['*']
