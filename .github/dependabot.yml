@@ -9,7 +9,8 @@ updates:
     open-pull-requests-limit: 5
     groups:
       # One PR for all the routine stuff instead of six. Less noise on a
-      # weekend project.
+      # weekend project. Majors are deliberately left out of both groups so a
+      # breaking bump arrives on its own and gets read before it lands.
       dev-dependencies:
         dependency-type: development
         update-types: [minor, patch]
@@ -21,3 +22,12 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    groups:
+      # One PR for all action bumps instead of one per action.
+      #
+      # No update-types filter here, unlike npm above: action majors are
+      # usually just a runner/runtime bump, and every one of the nine actions
+      # in this repo was a major behind at setup. Splitting majors out would
+      # recreate exactly the PR pile this group exists to prevent.
+      actions:
+        patterns: ['*']
