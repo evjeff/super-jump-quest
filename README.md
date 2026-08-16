@@ -113,7 +113,9 @@ real browser proves otherwise.
 
 ## Docs
 
-- [`CLAUDE.md`](CLAUDE.md) — the rules AI assistants follow in this repo
+- [`AGENTS.md`](AGENTS.md) — the rules AI assistants follow in this repo.
+  Read by Codex, Copilot, Cursor and Gemini CLI directly; Claude Code picks it
+  up through the one-line [`CLAUDE.md`](CLAUDE.md) pointer.
 - [`IDEAS.md`](IDEAS.md) — the idea list
 - [`docs/adr/`](docs/adr/) — why the stack was chosen
 
