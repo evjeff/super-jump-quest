@@ -21,7 +21,8 @@ Then open http://localhost:5173. Edit a file, hit save, and the browser updates
 instantly — no refresh needed.
 
 **Controls:** arrows or WASD to move, space to jump — and space twice more in
-mid-air for a triple jump. `R` restarts after you win.
+mid-air for a triple jump. `N` starts the next level when you finish one, and
+`R` starts the whole game over from level 1.
 
 ---
 
@@ -41,9 +42,10 @@ matters, each with a comment explaining what it does:
 
 Nothing in that file can break the game. Try ridiculous numbers — that's the fun part.
 
-**Want to redesign the level?** Open [`src/levels/level1.ts`](src/levels/level1.ts).
-Platforms and coins are just x/y numbers on a 960 × 540 grid, where `y` counts
-*downward* from the top.
+**Want to redesign a level?** Open [`src/levels/`](src/levels/) — one file per
+level. Platforms and coins are just x/y numbers on a 960 × 540 grid, where `y`
+counts *downward* from the top. A brand-new level is a copy of one of those
+files, added to the list in [`src/levels/index.ts`](src/levels/index.ts).
 
 ---
 
