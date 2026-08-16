@@ -1,0 +1,20 @@
+# Git hooks. Installed automatically by `pnpm install` (see the "prepare" script).
+#
+# The point of these is to catch a mistake in 2 seconds on your machine instead
+# of 3 minutes later in CI. If you ever need to bypass them in an emergency:
+#   git commit --no-verify
+
+pre-commit:
+  parallel: true
+  jobs:
+    - name: format-and-lint
+      glob: '*.{ts,js,json,html}'
+      run: pnpm exec biome check --write --no-errors-on-unmatched {staged_files}
+      stage_fixed: true
+
+pre-push:
+  jobs:
+    - name: typecheck
+      run: pnpm run typecheck
+    - name: test
+      run: pnpm run test
