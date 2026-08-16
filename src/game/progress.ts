@@ -28,6 +28,9 @@ export function afterLevel(finishedIndex: number, levelCount: number): Progress 
   return { kind: 'next-level', levelIndex: nextIndex }
 }
 
+/** What the player has to work with: a keyboard, or a screen to poke. */
+export type ControlHint = 'keys' | 'touch'
+
 /**
  * The big words in the middle of the screen.
  *
@@ -36,18 +39,42 @@ export function afterLevel(finishedIndex: number, levelCount: number): Progress 
  *
  * `extraLines` is for news about the run you just finished — how long it took,
  * whether it was a record. They go directly under the headline, because that's
- * where your eyes already are, and above the "press a key" lines, which you
+ * where your eyes already are, and above the "do this next" lines, which you
  * only read once you're done cheering.
+ *
+ * `controls` decides what those last lines ask for. A phone has no N key and no
+ * R key, so telling a kid to press one is telling them the game is stuck.
  */
-export function bannerText(progress: Progress, extraLines: string[] = []): string {
+export function bannerText(
+  progress: Progress,
+  extraLines: string[] = [],
+  controls: ControlHint = 'keys',
+): string {
   const lines =
     progress.kind === 'game-complete'
-      ? ['YOU WIN!', ...extraLines, 'press R to play again from level 1']
+      ? ['YOU WIN!', ...extraLines, ...playAgainLines(controls)]
       : [
           `LEVEL ${progress.levelIndex} DONE!`,
           ...extraLines,
-          `press N for level ${progress.levelIndex + 1}`,
-          'press R to start over at level 1',
+          ...nextLevelLines(progress.levelIndex + 1, controls),
         ]
   return lines.join('\n')
+}
+
+function playAgainLines(controls: ControlHint): string[] {
+  if (controls === 'touch') return ['tap the screen to play again from level 1']
+  return ['press R to play again from level 1']
+}
+
+function nextLevelLines(nextLevelNumber: number, controls: ControlHint): string[] {
+  // On a phone, "start over" is the ↻ button in the top corner rather than a
+  // key — and it has to be named here, because a faint symbol in a corner is
+  // not something a seven-year-old goes looking for on their own.
+  // Kept short on purpose: the banner is drawn in one long line of big
+  // monospace text, and a longer sentence than this runs off both edges of the
+  // screen on the narrowest phone.
+  if (controls === 'touch') {
+    return [`tap the screen for level ${nextLevelNumber}`, 'or tap ↻ to start over']
+  }
+  return [`press N for level ${nextLevelNumber}`, 'press R to start over at level 1']
 }

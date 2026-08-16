@@ -58,4 +58,49 @@ describe('bannerText', () => {
       'YOU WIN!\nTIME 0:24.6\nBEST 0:20.1\npress R to play again from level 1',
     )
   })
+
+  // On a phone there is no N and no R, so the banner has to ask for something a
+  // finger can actually do. Everything above the "press this" lines — the
+  // headline, the time, the record — is the same either way.
+  describe('on a touchscreen', () => {
+    it('asks for a tap instead of the N key', () => {
+      expect(bannerText({ kind: 'next-level', levelIndex: 1 }, [], 'touch')).toBe(
+        'LEVEL 1 DONE!\ntap the screen for level 2\nor tap ↻ to start over',
+      )
+    })
+
+    it('keeps every line short enough to fit on a phone', () => {
+      // The banner is one lump of big monospace text with no wrapping. Around
+      // 34 characters is as wide as the screen gets.
+      const longest = bannerText({ kind: 'next-level', levelIndex: 9 }, ['TIME 0:24.6'], 'touch')
+        .split('\n')
+        .reduce((widest, line) => Math.max(widest, line.length), 0)
+
+      expect(longest).toBeLessThanOrEqual(34)
+    })
+
+    it('asks for a tap instead of the R key on the win screen', () => {
+      expect(bannerText({ kind: 'game-complete' }, [], 'touch')).toBe(
+        'YOU WIN!\ntap the screen to play again from level 1',
+      )
+    })
+
+    it('still shows the time and the record', () => {
+      expect(
+        bannerText({ kind: 'game-complete' }, ['TIME 0:24.6', 'NEW BEST TIME!'], 'touch'),
+      ).toContain('TIME 0:24.6\nNEW BEST TIME!')
+    })
+
+    it('never mentions a key a phone does not have', () => {
+      const touchBanners = [
+        bannerText({ kind: 'next-level', levelIndex: 1 }, [], 'touch'),
+        bannerText({ kind: 'game-complete' }, [], 'touch'),
+      ]
+
+      for (const banner of touchBanners) {
+        expect(banner).not.toContain('press N')
+        expect(banner).not.toContain('press R')
+      }
+    })
+  })
 })

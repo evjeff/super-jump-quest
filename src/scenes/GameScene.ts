@@ -4,7 +4,7 @@ import { createBeeper, webAudioOutput } from '../audio/beeper'
 import type { JumpState } from '../game/jump'
 import { canJump, createJumpState, justLanded, registerJump, syncGrounded } from '../game/jump'
 import { facingDirection, horizontalVelocity } from '../game/movement'
-import type { Progress } from '../game/progress'
+import type { ControlHint, Progress } from '../game/progress'
 import { afterLevel, bannerText } from '../game/progress'
 import type { ScoreState } from '../game/score'
 import { collectCoin, createScoreState, formatScore, isLevelComplete } from '../game/score'
@@ -16,6 +16,7 @@ import type { Level } from '../levels'
 import { LEVELS } from '../levels'
 import { loadBestTimes, saveBestTimes } from '../storage/bestTimes'
 import { TUNING } from '../tuning'
+import { TouchPad, wantsTouchControls } from './TouchPad'
 
 /** What one level hands to the next when you press N. */
 interface GameSceneData {
@@ -33,8 +34,13 @@ export class GameScene extends Phaser.Scene {
   private leftKeys: Phaser.Input.Keyboard.Key[] = []
   private rightKeys: Phaser.Input.Keyboard.Key[] = []
   private jumpKeys: Phaser.Input.Keyboard.Key[] = []
-  private restartKey!: Phaser.Input.Keyboard.Key
-  private nextLevelKey!: Phaser.Input.Keyboard.Key
+  private restartKey: Phaser.Input.Keyboard.Key | null = null
+  private nextLevelKey: Phaser.Input.Keyboard.Key | null = null
+
+  /** The on-screen buttons. Null on a computer, where the keyboard is enough. */
+  private touchPad: TouchPad | null = null
+  /** When the finish banner went up, so a leftover finger can't skip past it. */
+  private bannerShownAt = 0
 
   private beeper: Beeper = createBeeper(null, 0)
 
@@ -87,6 +93,7 @@ export class GameScene extends Phaser.Scene {
     this.lastLandingAt = 0
     this.squashStartedAt = Number.NEGATIVE_INFINITY
     this.outcome = null
+    this.bannerShownAt = 0
     // A fresh clock every time a level starts — and that's every time this runs,
     // whether he pressed N for the next level or R to start the whole game over.
     this.levelTimeMs = 0
@@ -97,18 +104,26 @@ export class GameScene extends Phaser.Scene {
     this.buildCoins()
     this.buildHud()
     this.bindKeys()
+    // Only a touchscreen gets on-screen buttons. Built last so they're drawn
+    // over the top of everything else.
+    this.touchPad = wantsTouchControls(this.game) ? new TouchPad(this) : null
     this.beeper = createBeeper(webAudioOutput(this.sound), TUNING.sound.volume)
   }
 
   override update(_time: number, delta: number): void {
+    // Where the fingers are, before anything asks. Once per frame, first thing.
+    this.touchPad?.read()
+
     // Always redraw him, even on the win screen, so he can never be left
     // frozen mid-squash.
     this.drawPlayer()
 
-    // R always means the same thing, wherever you press it: back to the very
-    // beginning, score and all. Checked before anything else so a kid stuck on
-    // a hard jump can start over without reloading the page.
-    if (Phaser.Input.Keyboard.JustDown(this.restartKey)) {
+    // R — or the ↻ button on a phone — always means the same thing, wherever
+    // you press it: back to the very beginning, score and all. Checked before
+    // anything else so a kid stuck on a hard jump can start over without
+    // reloading the page, and so that pressing ↻ on the finish banner starts
+    // the game over rather than counting as a "tap to carry on".
+    if (justDown(this.restartKey) || this.touchPad?.wasJustPressed('restart')) {
       this.scene.restart({ levelIndex: 0, points: 0 })
       return
     }
@@ -116,7 +131,7 @@ export class GameScene extends Phaser.Scene {
     // Everything below here is "still playing", so the clock stops the moment
     // the finish banner goes up and doesn't tick while it waits for a key.
     if (this.outcome) {
-      this.handleBannerKeys(this.outcome)
+      this.handleBannerInput(this.outcome)
       return
     }
 
@@ -128,14 +143,26 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * The extra key that only works while the big banner is up: N carries the
-   * score forward into the next level. (R is handled in `update`, because it
-   * works at any time.)
+   * What only works while the big banner is up: N — or a tap anywhere, on a
+   * phone — carries the score forward into the next level. (R and ↻ are
+   * handled in `update`, because they work at any time.)
    */
-  private handleBannerKeys(outcome: Progress): void {
-    if (outcome.kind === 'next-level' && Phaser.Input.Keyboard.JustDown(this.nextLevelKey)) {
-      this.scene.restart({ levelIndex: outcome.levelIndex, points: this.scoreState.points })
+  private handleBannerInput(outcome: Progress): void {
+    // A tap only counts once the banner has been up a moment. Winning tends to
+    // leave a finger on the jump button, and the very next press of it would
+    // otherwise wipe away a "NEW BEST TIME!" nobody had time to read.
+    const bannerSettled = this.time.now - this.bannerShownAt >= TUNING.touch.bannerTapDelayMs
+    const tapped = bannerSettled && this.touchPad?.wasScreenTapped() === true
+
+    if (outcome.kind === 'next-level') {
+      if (justDown(this.nextLevelKey) || tapped) {
+        this.scene.restart({ levelIndex: outcome.levelIndex, points: this.scoreState.points })
+      }
+      return
     }
+
+    // The game is won. There is no next level, so a tap does what R does.
+    if (tapped) this.scene.restart({ levelIndex: 0, points: 0 })
   }
 
   // --- setup -------------------------------------------------------------
@@ -207,9 +234,9 @@ export class GameScene extends Phaser.Scene {
 
   private bindKeys(): void {
     const keyboard = this.input.keyboard
-    if (!keyboard) {
-      throw new Error('Keyboard input is unavailable — the game needs a keyboard to play.')
-    }
+    // A device with no keyboard at all is no longer a dead end: it gets the
+    // on-screen buttons instead. Every key below simply never fires.
+    if (!keyboard) return
 
     const { KeyCodes } = Phaser.Input.Keyboard
     this.leftKeys = [keyboard.addKey(KeyCodes.LEFT), keyboard.addKey(KeyCodes.A)]
@@ -242,8 +269,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   private handleMovement(): void {
+    // Keys and on-screen buttons say the same thing, so either one moves him —
+    // and a laptop with a touchscreen can use whichever is nearer.
     const velocityX = horizontalVelocity(
-      { left: anyKeyDown(this.leftKeys), right: anyKeyDown(this.rightKeys) },
+      {
+        left: anyKeyDown(this.leftKeys) || this.touchPad?.isHeld('left') === true,
+        right: anyKeyDown(this.rightKeys) || this.touchPad?.isHeld('right') === true,
+      },
       TUNING.player.speed,
     )
     this.player.setVelocityX(velocityX)
@@ -282,7 +314,9 @@ export class GameScene extends Phaser.Scene {
     }
     this.jumpState = syncGrounded(this.jumpState, onGround)
 
-    const jumpPressed = this.jumpKeys.some((key) => Phaser.Input.Keyboard.JustDown(key))
+    const jumpPressed =
+      this.jumpKeys.some((key) => Phaser.Input.Keyboard.JustDown(key)) ||
+      this.touchPad?.wasJustPressed('jump') === true
     if (jumpPressed && canJump(this.jumpState, TUNING.player.maxJumps)) {
       this.player.setVelocityY(-TUNING.player.jumpVelocity)
       this.jumpState = registerJump(this.jumpState)
@@ -331,7 +365,11 @@ export class GameScene extends Phaser.Scene {
     if (isLevelComplete(this.scoreState, this.level.coins.length)) {
       const outcome = afterLevel(this.levelIndex, LEVELS.length)
       this.outcome = outcome
+      this.bannerShownAt = this.time.now
       this.player.setVelocity(0, 0)
+      // Nothing left to steer, and the banner is the thing to read now. ↻ stays
+      // where it is — on a phone it's the only way back to level 1.
+      this.touchPad?.setThumbControlsVisible(false)
 
       // The clock stopped the instant `outcome` was set above, so this is his
       // real time for the level. Only a genuine record gets written down.
@@ -340,7 +378,10 @@ export class GameScene extends Phaser.Scene {
         this.bestTimes = result.times
         saveBestTimes(result.times)
       }
-      this.banner.setText(bannerText(outcome, finishBannerLines(this.levelTimeMs, result)))
+      // The banner has to ask for something this player can actually do: a key
+      // on a computer, a tap on a phone.
+      const hint: ControlHint = this.touchPad ? 'touch' : 'keys'
+      this.banner.setText(bannerText(outcome, finishBannerLines(this.levelTimeMs, result), hint))
       this.refreshHud()
       // Only reachable by picking up the last coin, and every coin is switched
       // off by then — so the fanfare plays once per win, never twice. Starting a
@@ -379,4 +420,9 @@ export class GameScene extends Phaser.Scene {
 
 function anyKeyDown(keys: Phaser.Input.Keyboard.Key[]): boolean {
   return keys.some((key) => key.isDown)
+}
+
+/** Did this key go down this frame? A key that doesn't exist never does. */
+function justDown(key: Phaser.Input.Keyboard.Key | null): boolean {
+  return key !== null && Phaser.Input.Keyboard.JustDown(key)
 }

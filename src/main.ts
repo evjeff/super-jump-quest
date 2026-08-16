@@ -24,9 +24,19 @@ const game = new Phaser.Game({
       debug: false,
     },
   },
+  input: {
+    // Two thumbs at once is the whole point of the on-screen buttons: running
+    // and jumping together is one finger on ◀ and another on ▲. One spare on
+    // top of that, because a small hand rests a third finger on the glass.
+    activePointers: 3,
+  },
   scale: {
     mode: Phaser.Scale.FIT,
-    autoCenter: Phaser.Scale.CENTER_HORIZONTALLY,
+    autoCenter: Phaser.Scale.CENTER_BOTH,
+    // The `#game` div is already sized by CSS to the right shape for whatever
+    // screen this is — phone, tablet or laptop — so Phaser fits the picture
+    // into that rather than resizing the page around it.
+    expandParent: false,
   },
   scene: [BootScene, GameScene],
 })
