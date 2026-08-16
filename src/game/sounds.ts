@@ -90,6 +90,55 @@ export function coinSound(): Sound {
   ]
 }
 
+/**
+ * The little "ta-da!" when you win.
+ *
+ * Four notes, one after another, each a step higher: C, E, G, and then C again
+ * an octave up. Those first three are a C major chord — the happy-sounding one —
+ * so it comes out as a cheer rather than a random pile of beeps, and landing
+ * back on C at the top is what makes it sound FINISHED instead of stopping
+ * halfway. The last note is held longer and a bit louder: that's the "daaa".
+ *
+ * The whole thing is over in about six-tenths of a second, so it celebrates and
+ * then gets out of the way.
+ */
+export function winSound(): Sound {
+  return [
+    {
+      waveform: 'square',
+      startFreq: 523,
+      endFreq: 523,
+      duration: 0.1,
+      volume: 0.38,
+      delay: 0,
+    },
+    {
+      waveform: 'square',
+      startFreq: 659,
+      endFreq: 659,
+      duration: 0.1,
+      volume: 0.38,
+      delay: 0.09,
+    },
+    {
+      waveform: 'square',
+      startFreq: 784,
+      endFreq: 784,
+      duration: 0.1,
+      volume: 0.38,
+      delay: 0.18,
+    },
+    {
+      waveform: 'square',
+      startFreq: 1046,
+      endFreq: 1046,
+      duration: 0.3,
+      volume: 0.45,
+      delay: 0.27,
+    },
+  ]
+}
+
 /** The soft thud when he touches down. Quiet on purpose — it happens a lot. */
 export function landingSound(): Sound {
   return [

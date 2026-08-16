@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { coinSound, isDistinctLanding, jumpSound, landingSound } from './sounds'
+import { coinSound, isDistinctLanding, jumpSound, landingSound, winSound } from './sounds'
 
 describe('coinSound', () => {
   it('is two notes, the second higher than the first', () => {
@@ -50,10 +50,52 @@ describe('landingSound', () => {
   })
 })
 
+describe('winSound', () => {
+  // A win screen you have to wait through stops being a reward. The whole
+  // fanfare has to be over before the kid reaches for the R key.
+  const BUDGET_SECONDS = 1
+
+  it('is a little tune, not a single beep', () => {
+    expect(winSound().length).toBeGreaterThan(1)
+  })
+
+  it('plays its notes one after another, never all at once', () => {
+    const delays = winSound().map((beep) => beep.delay)
+
+    for (let i = 1; i < delays.length; i++) {
+      expect(delays[i] ?? 0).toBeGreaterThan(delays[i - 1] ?? 0)
+    }
+  })
+
+  it('climbs, so it sounds like cheering rather than sighing', () => {
+    const pitches = winSound().map((beep) => beep.startFreq)
+
+    for (let i = 1; i < pitches.length; i++) {
+      expect(pitches[i] ?? 0).toBeGreaterThan(pitches[i - 1] ?? 0)
+    }
+  })
+
+  it('finishes on the octave above the note it started on', () => {
+    const notes = winSound()
+    const first = notes[0]
+    const last = notes[notes.length - 1]
+
+    // Doubling a pitch is the same note, one octave up. Landing there is what
+    // makes it sound finished instead of stopping in the middle.
+    expect(last?.startFreq).toBeCloseTo((first?.startFreq ?? 0) * 2, 0)
+  })
+
+  it('is over and done with inside the budget', () => {
+    const endsAt = Math.max(...winSound().map((beep) => beep.delay + beep.duration))
+
+    expect(endsAt).toBeLessThan(BUDGET_SECONDS)
+  })
+})
+
 describe('every sound recipe', () => {
   // Web Audio's exponential ramps blow up on zero or negative values, so a
   // recipe with a 0 anywhere is a silent crash waiting to happen.
-  const everyBeep = [coinSound(), jumpSound(1), jumpSound(3), landingSound()].flat()
+  const everyBeep = [coinSound(), jumpSound(1), jumpSound(3), landingSound(), winSound()].flat()
 
   it('uses positive pitches, durations and volumes', () => {
     for (const beep of everyBeep) {
@@ -61,6 +103,8 @@ describe('every sound recipe', () => {
       expect(beep.endFreq).toBeGreaterThan(0)
       expect(beep.duration).toBeGreaterThan(0)
       expect(beep.volume).toBeGreaterThan(0)
+      // Above 1 the note clips into a nasty crackle instead of getting louder.
+      expect(beep.volume).toBeLessThanOrEqual(1)
       expect(beep.delay).toBeGreaterThanOrEqual(0)
     }
   })

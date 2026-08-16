@@ -22,6 +22,8 @@ _(nothing yet — pick something from below)_
 - A "you win" screen when you get every coin
 - Sounds for jumping, landing, and grabbing a coin — and each jump in a triple
   jump sounds a step higher than the last, so you can hear when you're out
+- A little "ta-da!" fanfare when you win — four notes climbing up to a big
+  finish, so winning sounds like winning
 
 ## 📋 Next up
 
@@ -29,7 +31,6 @@ _Good starting points — each is small enough to finish in one sitting._
 
 - [ ] A mute key, so the game can be played at bedtime
       (for now: set `sound.volume` to `0` in `src/tuning.ts`)
-- [ ] A little fanfare on the "you win" screen
 - [ ] Make the player squash a little when he lands
 - [ ] A second level, unlocked after finishing the first
 - [ ] Show a timer, and remember the best time
