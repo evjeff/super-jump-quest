@@ -30,6 +30,10 @@ _(nothing yet — pick something from below)_
   straight into it: a hole in the ground to jump across, a staircase climbing
   into the sky, and one coin so high up that only a triple jump gets it. Your
   score keeps counting up across both levels, and R starts the whole thing over
+- A clock in the corner, counting the seconds on the level you're playing — it
+  stops the moment you grab the last coin, and the game remembers your fastest
+  finish on each level even after you close the tab, so there's always a time
+  to beat and a big "NEW BEST TIME!" when you beat it
 
 ## 📋 Next up
 
@@ -37,7 +41,6 @@ _Good starting points — each is small enough to finish in one sitting._
 
 - [ ] A mute key, so the game can be played at bedtime
       (for now: set `sound.volume` to `0` in `src/tuning.ts`)
-- [ ] Show a timer, and remember the best time
 
 ## 🌟 Someday / bigger
 

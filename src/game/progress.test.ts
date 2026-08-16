@@ -44,4 +44,18 @@ describe('bannerText', () => {
       'YOU WIN!\npress R to play again from level 1',
     )
   })
+
+  it('puts extra lines right under the headline, where you look first', () => {
+    expect(
+      bannerText({ kind: 'next-level', levelIndex: 1 }, ['TIME 0:24.6', 'NEW BEST TIME!']),
+    ).toBe(
+      'LEVEL 1 DONE!\nTIME 0:24.6\nNEW BEST TIME!\npress N for level 2\npress R to start over at level 1',
+    )
+  })
+
+  it('puts them on the win screen too', () => {
+    expect(bannerText({ kind: 'game-complete' }, ['TIME 0:24.6', 'BEST 0:20.1'])).toBe(
+      'YOU WIN!\nTIME 0:24.6\nBEST 0:20.1\npress R to play again from level 1',
+    )
+  })
 })

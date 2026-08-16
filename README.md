@@ -24,6 +24,10 @@ instantly — no refresh needed.
 mid-air for a triple jump. `N` starts the next level when you finish one, and
 `R` starts the whole game over from level 1.
 
+The clock in the corner times the level you're on and stops when you grab the
+last coin. Your fastest finish on each level is remembered in your browser, so
+there's always a time to beat.
+
 ---
 
 ## 🎛️ Want to change how the game feels?
@@ -59,6 +63,8 @@ src/
 │                      sound like. Pure functions. No Phaser. Unit tested.
 ├── audio/           ← the only thing that makes noise. No sound files —
 │                      the computer plays the notes itself.
+├── storage/         ← the only thing that remembers anything after you
+│                      close the tab (best times)
 ├── scenes/          ← the DRAWING: Phaser scenes, sprites, physics
 └── main.ts          ← starts the game
 ```
