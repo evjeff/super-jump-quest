@@ -10,8 +10,11 @@ import type { ScoreState } from '../game/score'
 import { collectCoin, createScoreState, formatScore, isLevelComplete } from '../game/score'
 import { coinSound, isDistinctLanding, jumpSound, landingSound, winSound } from '../game/sounds'
 import { squashScale } from '../game/squash'
+import type { BestTimes } from '../game/timer'
+import { bestTimeFor, finishBannerLines, formatTime, recordTime } from '../game/timer'
 import type { Level } from '../levels'
 import { LEVELS } from '../levels'
+import { loadBestTimes, saveBestTimes } from '../storage/bestTimes'
 import { TUNING } from '../tuning'
 
 /** What one level hands to the next when you press N. */
@@ -44,6 +47,17 @@ export class GameScene extends Phaser.Scene {
   /** Null while he's still playing; set the moment the last coin is grabbed. */
   private outcome: Progress | null = null
 
+  /**
+   * How long he's been on THIS level, in milliseconds. It's added up from the
+   * game's own frames rather than read off a wall clock, so it can only count
+   * time the game was really running.
+   */
+  private levelTimeMs = 0
+  /** The clock as it was last drawn, so the HUD is only redrawn when a tenth ticks over. */
+  private shownTime = ''
+  /** The best times we've saved, read once when the level starts. */
+  private bestTimes: BestTimes = {}
+
   /** Which level he's on, counting from 0. Level 0 is the one people call 1. */
   private levelIndex = 0
   private level: Level = LEVELS[0]
@@ -73,6 +87,10 @@ export class GameScene extends Phaser.Scene {
     this.lastLandingAt = 0
     this.squashStartedAt = Number.NEGATIVE_INFINITY
     this.outcome = null
+    // A fresh clock every time a level starts — and that's every time this runs,
+    // whether he pressed N for the next level or R to start the whole game over.
+    this.levelTimeMs = 0
+    this.bestTimes = loadBestTimes()
 
     this.buildPlatforms()
     this.buildPlayer()
@@ -82,7 +100,7 @@ export class GameScene extends Phaser.Scene {
     this.beeper = createBeeper(webAudioOutput(this.sound), TUNING.sound.volume)
   }
 
-  override update(): void {
+  override update(_time: number, delta: number): void {
     // Always redraw him, even on the win screen, so he can never be left
     // frozen mid-squash.
     this.drawPlayer()
@@ -95,11 +113,14 @@ export class GameScene extends Phaser.Scene {
       return
     }
 
+    // Everything below here is "still playing", so the clock stops the moment
+    // the finish banner goes up and doesn't tick while it waits for a key.
     if (this.outcome) {
       this.handleBannerKeys(this.outcome)
       return
     }
 
+    this.advanceTimer(delta)
     this.handleMovement()
     this.handleJumping()
     this.handleFalling()
@@ -204,6 +225,22 @@ export class GameScene extends Phaser.Scene {
 
   // --- per-frame behaviour ------------------------------------------------
 
+  /**
+   * Move the clock on by however long the last frame took.
+   *
+   * `delta` is the game's own measure of that, which matters when the tab is
+   * hidden: a hidden tab draws no frames at all, so the clock simply waits
+   * there instead of quietly running on in the background, and Phaser caps the
+   * one long frame you get on the way back. Reading a wall clock instead would
+   * hand him a level that took eleven minutes because he went for lunch.
+   *
+   * The HUD is only rewritten when the tenth on screen actually changes.
+   */
+  private advanceTimer(delta: number): void {
+    this.levelTimeMs += delta
+    if (formatTime(this.levelTimeMs) !== this.shownTime) this.refreshHud()
+  }
+
   private handleMovement(): void {
     const velocityX = horizontalVelocity(
       { left: anyKeyDown(this.leftKeys), right: anyKeyDown(this.rightKeys) },
@@ -263,6 +300,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   private handleFalling(): void {
+    // Falling in the pit puts him back at the start of the level, but it is NOT
+    // starting the level again: he keeps his score, his coins and his clock.
+    // Falling in costs you time — that's what makes a fast run worth something.
     if (this.player.y > TUNING.world.deathDepth) {
       this.player.setPosition(this.level.playerStart.x, this.level.playerStart.y)
       this.player.setVelocity(0, 0)
@@ -292,7 +332,16 @@ export class GameScene extends Phaser.Scene {
       const outcome = afterLevel(this.levelIndex, LEVELS.length)
       this.outcome = outcome
       this.player.setVelocity(0, 0)
-      this.banner.setText(bannerText(outcome))
+
+      // The clock stopped the instant `outcome` was set above, so this is his
+      // real time for the level. Only a genuine record gets written down.
+      const result = recordTime(this.bestTimes, this.level.name, this.levelTimeMs)
+      if (result.isNewBest) {
+        this.bestTimes = result.times
+        saveBestTimes(result.times)
+      }
+      this.banner.setText(bannerText(outcome, finishBannerLines(this.levelTimeMs, result)))
+      this.refreshHud()
       // Only reachable by picking up the last coin, and every coin is switched
       // off by then — so the fanfare plays once per win, never twice. Starting a
       // level runs create() again, which puts the coins back and clears
@@ -303,12 +352,27 @@ export class GameScene extends Phaser.Scene {
 
   private refreshHud(): void {
     const total = this.level.coins.length
-    // Two short lines, not one long one. Adding the level name made a single
-    // line stretch two thirds of the way across the screen, far enough to be
-    // drawn on top of him whenever he was up high on the left-hand side.
+    this.shownTime = formatTime(this.levelTimeMs)
+    const best = bestTimeFor(this.bestTimes, this.level.name)
+
+    // Short lines, and only THREE of them. The HUD has to keep out of the way
+    // of the player, and it has been in his way twice now: once sideways, when
+    // putting the level name on the same line as the score stretched it two
+    // thirds of the way across the screen, and once downwards — a fourth line
+    // reaches to y=106, and standing on the top ledge of level 2 puts the top
+    // of his head at y=90, so he'd be behind the writing. Three lines stop at
+    // y=83, clear of the highest ledge he can stand on in either level, which
+    // is why the clock and the record share a line instead of taking one each.
+    //
+    // "THIS LEVEL" says out loud what is being timed — this level, not the
+    // whole game — so it matches the coin count on the line above it.
+    const clock = best === null ? '' : `  BEST ${formatTime(best)}`
     this.hud.setText([
       `LEVEL ${this.levelIndex + 1} ${this.level.name}`,
       `SCORE ${formatScore(this.scoreState.points)}   COINS ${this.scoreState.coinsCollected}/${total}`,
+      // No record shown until there IS one: nothing to beat on your first go,
+      // and an empty "BEST --:--" is just a puzzle for a kid to read.
+      `THIS LEVEL ${this.shownTime}${clock}`,
     ])
   }
 }

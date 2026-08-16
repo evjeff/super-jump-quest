@@ -18,6 +18,9 @@ architectural elegance. The project fails by being abandoned, not by being messy
   `src/game/sounds.ts` into Web Audio notes. No sound files anywhere.
 - `src/scenes/` — Phaser scenes: drawing, input, physics wiring. Thin; delegates
   rules to `src/game/`.
+- `src/storage/` — the only place that touches the browser's memory
+  (`localStorage`, for best times). Every call is wrapped so a browser with
+  storage switched off still plays; it just forgets.
 - `src/main.ts` — boots the Phaser game.
 - `tests/` — Playwright browser smoke tests.
 - `docs/adr/` — decision records.

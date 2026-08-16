@@ -167,6 +167,11 @@ test('finishing a level starts the next one, and finishing the last one wins', a
 
   expect(await hud(page)).toContain('LEVEL 1')
 
+  // Dawdle before finishing, so level 1 puts a second and a half on the clock.
+  // A clock that forgot to go back to zero would carry that into level 2, and
+  // the checks below would see it.
+  await page.waitForTimeout(1500)
+
   await collectEveryCoin(page)
   expect(await banner(page)).toContain('LEVEL 1 DONE!')
 
@@ -188,6 +193,12 @@ test('finishing a level starts the next one, and finishing the last one wins', a
   expect(level2.banner).toBe('')
   expect(level2.jumpsUsed).toBe(0)
   expect(level2.squashCleared).toBe(true)
+  // ...and the clock starts the new level from zero rather than carrying on.
+  expect(level2.levelTimeMs).toBeLessThan(600)
+  expect(level2.hud).toContain('THIS LEVEL 0:00')
+
+  // Dawdle again, so the same check after R has something to catch.
+  await page.waitForTimeout(1500)
 
   await collectEveryCoin(page)
   expect(await banner(page)).toContain('YOU WIN!')
@@ -195,6 +206,11 @@ test('finishing a level starts the next one, and finishing the last one wins', a
   await holdKey(page, 'KeyR')
   await expect.poll(() => hud(page), { timeout: 5_000 }).toContain('LEVEL 1')
   expect(await hud(page)).toContain('SCORE 00000')
+
+  // Starting the whole game over gives him a fresh clock too.
+  const afterRestart = await levelState(page)
+  expect(afterRestart.levelTimeMs).toBeLessThan(600)
+  expect(afterRestart.hud).toContain('THIS LEVEL 0:00')
 
   expect(consoleErrors).toEqual([])
 })
@@ -223,6 +239,68 @@ test('R starts the game over in the middle of a level', async ({ page }) => {
   expect(await hud(page)).toContain('LEVEL 1')
 })
 
+/**
+ * The guardrail for remembering anything.
+ *
+ * The clock's sums and the "is this a record?" rule are unit tested, but only a
+ * real browser proves the clock is wired to the game's own frames, that it
+ * stops when the level does, and that a best time written into the browser's
+ * memory is still there after a reload — including when that memory comes back
+ * as nonsense, which a real browser will do to you one day.
+ */
+test('the level clock runs, stops at the finish, and the best time is remembered', async ({
+  page,
+}) => {
+  const consoleErrors: string[] = []
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text())
+  })
+  page.on('pageerror', (error) => consoleErrors.push(error.message))
+
+  await page.goto('/')
+  await waitForGameScene(page)
+
+  // A level nobody has finished has a clock but nothing to beat yet.
+  expect(await hud(page)).toContain('THIS LEVEL 0:0')
+  expect(await hud(page)).not.toContain('BEST')
+
+  // It counts up.
+  const atStart = await hud(page)
+  await page.waitForTimeout(1200)
+  expect(await hud(page)).not.toBe(atStart)
+
+  // Finishing stops it dead: the banner must not sit there racking up time.
+  await collectEveryCoin(page)
+  expect(await banner(page)).toContain('NEW BEST TIME!')
+  const atFinish = await levelTime(page)
+  await page.waitForTimeout(500)
+  expect(await levelTime(page)).toBe(atFinish)
+
+  // The number written down has to be the number the clock showed. Take the
+  // time straight off the banner and insist the record matches it, so a game
+  // that remembers some other number entirely can't slip past.
+  const shown = (await banner(page)).match(/TIME (\d+:\d\d\.\d)/)?.[1] ?? ''
+  expect(shown).not.toBe('')
+  expect(await hud(page)).toContain(`BEST ${shown}`)
+
+  // The record outlives the page — and it's still the same number afterwards.
+  const saved = await page.evaluate(() => localStorage.getItem('super-jump-quest.best-times'))
+  expect(saved).toContain('First Steps')
+  await page.reload()
+  await waitForGameScene(page)
+  expect(await hud(page)).toContain(`BEST ${shown}`)
+
+  // ...and scribbled-over memory is forgotten rather than shown as NaN.
+  await page.evaluate(() => localStorage.setItem('super-jump-quest.best-times', 'not json at all'))
+  await page.reload()
+  await waitForGameScene(page)
+  expect(await hud(page)).toContain('THIS LEVEL 0:0')
+  expect(await hud(page)).not.toContain('NaN')
+  expect(await hud(page)).not.toContain('BEST')
+
+  expect(consoleErrors).toEqual([])
+})
+
 declare global {
   interface Window {
     /** Notes the browser was asked to play, counted by the audio test above. */
@@ -241,6 +319,36 @@ type LevelProbe = {
   level: { coins: unknown[]; platforms: unknown[] }
   jumpState: { jumpsUsed: number }
   squashStartedAt: number
+  levelTimeMs: number
+}
+
+/**
+ * Wait until the Game scene has finished building itself.
+ *
+ * Being "active" isn't enough after a reload: for a frame or two the scene
+ * exists but its HUD doesn't, and reading text off nothing throws.
+ */
+async function waitForGameScene(page: import('@playwright/test').Page): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const scene = window.__GAME__?.scene.getScene('Game') as unknown as {
+            hud?: { text?: string }
+          } | null
+          return typeof scene?.hud?.text === 'string'
+        }),
+      { timeout: 15_000 },
+    )
+    .toBe(true)
+}
+
+/** Milliseconds on the level clock right now. */
+async function levelTime(page: import('@playwright/test').Page): Promise<number> {
+  return page.evaluate(() => {
+    const scene = window.__GAME__?.scene.getScene('Game') as unknown as LevelProbe
+    return scene.levelTimeMs
+  })
 }
 
 async function hud(page: import('@playwright/test').Page): Promise<string> {
@@ -268,6 +376,7 @@ async function levelState(page: import('@playwright/test').Page) {
       coinsAlive: scene.coins.getChildren().filter((coin) => coin.active).length,
       jumpsUsed: scene.jumpState.jumpsUsed,
       squashCleared: scene.squashStartedAt === Number.NEGATIVE_INFINITY,
+      levelTimeMs: scene.levelTimeMs,
     }
   })
 }

@@ -33,11 +33,21 @@ export function afterLevel(finishedIndex: number, levelCount: number): Progress 
  *
  * People count levels from 1, so everything shown here is one bigger than the
  * numbers the code uses.
+ *
+ * `extraLines` is for news about the run you just finished — how long it took,
+ * whether it was a record. They go directly under the headline, because that's
+ * where your eyes already are, and above the "press a key" lines, which you
+ * only read once you're done cheering.
  */
-export function bannerText(progress: Progress): string {
-  if (progress.kind === 'game-complete') return 'YOU WIN!\npress R to play again from level 1'
-
-  const finished = progress.levelIndex
-  const next = progress.levelIndex + 1
-  return `LEVEL ${finished} DONE!\npress N for level ${next}\npress R to start over at level 1`
+export function bannerText(progress: Progress, extraLines: string[] = []): string {
+  const lines =
+    progress.kind === 'game-complete'
+      ? ['YOU WIN!', ...extraLines, 'press R to play again from level 1']
+      : [
+          `LEVEL ${progress.levelIndex} DONE!`,
+          ...extraLines,
+          `press N for level ${progress.levelIndex + 1}`,
+          'press R to start over at level 1',
+        ]
+  return lines.join('\n')
 }
