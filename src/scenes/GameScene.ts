@@ -1,9 +1,12 @@
 import Phaser from 'phaser'
+import type { Beeper } from '../audio/beeper'
+import { createBeeper, webAudioOutput } from '../audio/beeper'
 import type { JumpState } from '../game/jump'
-import { canJump, createJumpState, registerJump, syncGrounded } from '../game/jump'
+import { canJump, createJumpState, justLanded, registerJump, syncGrounded } from '../game/jump'
 import { facingDirection, horizontalVelocity } from '../game/movement'
 import type { ScoreState } from '../game/score'
 import { collectCoin, createScoreState, formatScore, isLevelComplete } from '../game/score'
+import { coinSound, isDistinctLanding, jumpSound, landingSound } from '../game/sounds'
 import type { Level } from '../levels/level1'
 import { LEVEL_1 } from '../levels/level1'
 import { TUNING } from '../tuning'
@@ -21,9 +24,12 @@ export class GameScene extends Phaser.Scene {
   private jumpKeys: Phaser.Input.Keyboard.Key[] = []
   private restartKey!: Phaser.Input.Keyboard.Key
 
+  private beeper: Beeper = createBeeper(null, 0)
+
   private jumpState: JumpState = createJumpState()
   private scoreState: ScoreState = createScoreState()
   private facing: 'left' | 'right' = 'right'
+  private lastLandingAt = 0
   private won = false
 
   constructor() {
@@ -38,11 +44,13 @@ export class GameScene extends Phaser.Scene {
     this.buildCoins()
     this.buildHud()
     this.bindKeys()
+    this.beeper = createBeeper(webAudioOutput(this.sound), TUNING.sound.volume)
 
     // Reset per-restart state so `scene.restart()` is always a clean slate.
     this.jumpState = createJumpState()
     this.scoreState = createScoreState()
     this.facing = 'right'
+    this.lastLandingAt = 0
     this.won = false
   }
 
@@ -145,13 +153,27 @@ export class GameScene extends Phaser.Scene {
 
   private handleJumping(): void {
     const body = this.player.body as Phaser.Physics.Arcade.Body
-    this.jumpState = syncGrounded(this.jumpState, body.blocked.down || body.touching.down)
+    const onGround = body.blocked.down || body.touching.down
+
+    // Ask before syncing, while the state still remembers he was airborne.
+    if (justLanded(this.jumpState, onGround)) this.playLanding()
+    this.jumpState = syncGrounded(this.jumpState, onGround)
 
     const jumpPressed = this.jumpKeys.some((key) => Phaser.Input.Keyboard.JustDown(key))
     if (jumpPressed && canJump(this.jumpState, TUNING.player.maxJumps)) {
       this.player.setVelocityY(-TUNING.player.jumpVelocity)
       this.jumpState = registerJump(this.jumpState)
+      // Each jump in the chain sounds a step higher than the one before it.
+      this.beeper.play(jumpSound(this.jumpState.jumpsUsed))
     }
+  }
+
+  private playLanding(): void {
+    const now = this.time.now
+    if (!isDistinctLanding(now, this.lastLandingAt, TUNING.sound.landingCooldownMs)) return
+
+    this.lastLandingAt = now
+    this.beeper.play(landingSound())
   }
 
   private handleFalling(): void {
@@ -173,6 +195,7 @@ export class GameScene extends Phaser.Scene {
   private onCoinCollected(coin: Phaser.Physics.Arcade.Sprite): void {
     if (!coin.active) return
     coin.disableBody(true, true)
+    this.beeper.play(coinSound())
 
     this.scoreState = collectCoin(this.scoreState, TUNING.coins.value)
     this.refreshHud()
