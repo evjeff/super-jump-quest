@@ -7,3 +7,4 @@ new ADR supersedes the old one.
 | Date | Decision | Status |
 |---|---|---|
 | 2026-08-16 | [Stack and guardrails for an AI-assisted hobby game](20260816-game-stack-and-guardrails/README.md) | Accepted |
+| 2026-08-16 | [One set of agent instructions, in AGENTS.md](20260816-agent-instruction-files/README.md) | Accepted |
