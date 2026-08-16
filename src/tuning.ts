@@ -29,6 +29,21 @@ export const TUNING = {
 
     /** A little bounce when he lands. 0 = no bounce, 1 = rubber ball. */
     bounce: 0.1,
+
+    /**
+     * How much he squashes when he hits the ground. 0.25 means he flattens to
+     * three-quarters of his height for a moment — and goes just as much wider,
+     * so he still looks like the same amount of player.
+     *
+     * 0 turns the squash OFF. Try 0.6 for a pancake.
+     */
+    landingSquash: 0.25,
+
+    /**
+     * How long the squash lasts before he's back to normal, in milliseconds.
+     * Small = a quick sharp thump. Try 400 for wobbly jelly legs.
+     */
+    landingSquashMs: 160,
   },
 
   coins: {

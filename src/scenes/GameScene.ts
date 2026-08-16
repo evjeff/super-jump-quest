@@ -7,6 +7,7 @@ import { facingDirection, horizontalVelocity } from '../game/movement'
 import type { ScoreState } from '../game/score'
 import { collectCoin, createScoreState, formatScore, isLevelComplete } from '../game/score'
 import { coinSound, isDistinctLanding, jumpSound, landingSound, winSound } from '../game/sounds'
+import { squashScale } from '../game/squash'
 import type { Level } from '../levels/level1'
 import { LEVEL_1 } from '../levels/level1'
 import { TUNING } from '../tuning'
@@ -15,6 +16,7 @@ const LEVEL: Level = LEVEL_1
 
 export class GameScene extends Phaser.Scene {
   private player!: Phaser.Physics.Arcade.Sprite
+  private playerSkin!: Phaser.GameObjects.Image
   private coins!: Phaser.Physics.Arcade.Group
   private hud!: Phaser.GameObjects.Text
   private banner!: Phaser.GameObjects.Text
@@ -30,6 +32,8 @@ export class GameScene extends Phaser.Scene {
   private scoreState: ScoreState = createScoreState()
   private facing: 'left' | 'right' = 'right'
   private lastLandingAt = 0
+  /** When he last touched down. Infinitely long ago means "not squashed". */
+  private squashStartedAt = Number.NEGATIVE_INFINITY
   private won = false
 
   constructor() {
@@ -51,10 +55,15 @@ export class GameScene extends Phaser.Scene {
     this.scoreState = createScoreState()
     this.facing = 'right'
     this.lastLandingAt = 0
+    this.squashStartedAt = Number.NEGATIVE_INFINITY
     this.won = false
   }
 
   override update(): void {
+    // Always redraw him, even on the win screen, so he can never be left
+    // frozen mid-squash.
+    this.drawPlayer()
+
     if (this.won) {
       if (Phaser.Input.Keyboard.JustDown(this.restartKey)) this.scene.restart()
       return
@@ -85,6 +94,18 @@ export class GameScene extends Phaser.Scene {
     this.player.setBounce(TUNING.player.bounce)
     this.player.setCollideWorldBounds(false)
     this.player.setGravityY(TUNING.player.gravity)
+
+    // The yellow rectangle you actually SEE is a separate, physics-free copy
+    // that follows him around. Squashing the physics sprite would squash his
+    // invisible collision box too, and he'd sink into platforms or hover above
+    // them. This way the squash is pure drawing and can't break the game.
+    //
+    // Its handle is at its feet (origin 0.5, 1) and it's parked on the bottom
+    // of his collision box, so squashing presses him INTO the floor instead of
+    // shrinking him away from it.
+    this.player.setVisible(false)
+    this.playerSkin = this.add.image(playerStart.x, playerStart.y, 'player')
+    this.playerSkin.setOrigin(0.5, 1)
 
     const platforms = this.data.get('platforms') as Phaser.Physics.Arcade.StaticGroup
     this.physics.add.collider(this.player, platforms)
@@ -148,7 +169,20 @@ export class GameScene extends Phaser.Scene {
     this.player.setVelocityX(velocityX)
 
     this.facing = facingDirection(velocityX, this.facing)
-    this.player.setFlipX(this.facing === 'left')
+    this.playerSkin.setFlipX(this.facing === 'left')
+  }
+
+  /** Put the drawn player where the physics player is, squashed if he just landed. */
+  private drawPlayer(): void {
+    const body = this.player.body as Phaser.Physics.Arcade.Body
+    const { scaleX, scaleY } = squashScale(
+      this.time.now - this.squashStartedAt,
+      TUNING.player.landingSquash,
+      TUNING.player.landingSquashMs,
+    )
+
+    this.playerSkin.setPosition(body.center.x, body.bottom)
+    this.playerSkin.setScale(scaleX, scaleY)
   }
 
   private handleJumping(): void {
@@ -156,7 +190,16 @@ export class GameScene extends Phaser.Scene {
     const onGround = body.blocked.down || body.touching.down
 
     // Ask before syncing, while the state still remembers he was airborne.
-    if (justLanded(this.jumpState, onGround)) this.playLanding()
+    if (justLanded(this.jumpState, onGround)) {
+      // He squashes on EVERY touchdown, including the little bounces after
+      // the first one — unlike the thud, which is debounced, because three
+      // thuds in a row sound like a bug. Every squash is the same depth: a
+      // gentle bounce flattens him just as much as a long drop, so a bounce
+      // re-flattens him part-way through springing back. Restarting it on
+      // every touchdown does mean he can never be left stuck mid-squash.
+      this.squashStartedAt = this.time.now
+      this.playLanding()
+    }
     this.jumpState = syncGrounded(this.jumpState, onGround)
 
     const jumpPressed = this.jumpKeys.some((key) => Phaser.Input.Keyboard.JustDown(key))
@@ -181,6 +224,8 @@ export class GameScene extends Phaser.Scene {
       this.player.setPosition(LEVEL.playerStart.x, LEVEL.playerStart.y)
       this.player.setVelocity(0, 0)
       this.jumpState = createJumpState()
+      // Start the new life at his normal shape, not stuck mid-squash.
+      this.squashStartedAt = Number.NEGATIVE_INFINITY
     }
   }
 
