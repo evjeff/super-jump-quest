@@ -36,6 +36,15 @@ _(nothing yet — pick something from below)_
   together. Finish a level and you tap the screen to carry on instead of
   pressing N. Nothing changed on a computer — the keyboard works exactly the
   same as before
+- **Platforms that MOVE, and a third level made out of them — "The Sky Ferry".**
+  The purple ledges slide; the blue ones stay put. Stand on a purple one and it
+  carries you along with it. Level 3 is broken in half by a hole so wide that
+  even a triple jump can't clear it, so you have to stand at the edge and *wait*
+  for the ferry to come to you, then ride across while three coins float past.
+  Then a lift takes you up the sky — stand still and the coins come to you — and
+  one last ferry slides along the roof of the level to the very last coin.
+  If it's too fast, `platforms.movingSpeed` in `src/tuning.ts` slows every one of
+  them down at once (`0.5` is half speed, `0` stops them dead)
 - A clock in the corner, counting the seconds on the level you're playing — it
   stops the moment you grab the last coin, and the game remembers your fastest
   finish on each level even after you close the tab, so there's always a time
@@ -51,7 +60,6 @@ _Good starting points — each is small enough to finish in one sitting._
 ## 🌟 Someday / bigger
 
 - [ ] Enemies that walk back and forth
-- [ ] Moving platforms
 - [ ] A double-jump that leaves sparkles
 - [ ] Real drawn artwork instead of colored shapes
 - [ ] Background music

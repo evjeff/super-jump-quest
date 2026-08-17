@@ -33,6 +33,11 @@ The clock in the corner times the level you're on and stops when you grab the
 last coin. Your fastest finish on each level is remembered in your browser, so
 there's always a time to beat.
 
+**Three levels.** *First Steps* to learn to jump, *The Tall Tower* to learn to
+aim, and *The Sky Ferry* to learn to wait — its purple ledges slide back and
+forth, and standing on one carries you along with it. The hole in level 3 is too
+wide to jump, even with a triple jump: the ferry is the only way across.
+
 ---
 
 ## 🎛️ Want to change how the game feels?
@@ -49,6 +54,7 @@ matters, each with a comment explaining what it does:
 | A different colored sky | `colors.sky` | `0x2d1b4e` |
 | Turn the sound off | `sound.volume` | `0` |
 | Bigger buttons on a phone | `touch.buttonRadius` | `70` |
+| Level 3's moving platforms slower | `platforms.movingSpeed` | `0.5` |
 
 Nothing in that file can break the game. Try ridiculous numbers — that's the fun part.
 

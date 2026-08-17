@@ -16,6 +16,9 @@ export class BootScene extends Phaser.Scene {
   create(): void {
     this.makeRectTexture('player', 32, 48, TUNING.colors.player)
     this.makeRectTexture('platform', 32, 32, TUNING.colors.platform)
+    // A second, differently colored block for the platforms that move, so you
+    // can see which ones slide before you step on one.
+    this.makeRectTexture('movingPlatform', 32, 32, TUNING.colors.movingPlatform)
     this.makeCircleTexture('coin', 10, TUNING.colors.coin)
 
     this.scene.start('Game')
