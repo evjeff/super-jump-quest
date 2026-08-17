@@ -12,7 +12,11 @@ small thing beats three half-built big things.
 
 ## 🔨 Building right now
 
-_(nothing yet — pick something from below)_
+- **Level 3, "The Sky Ferry" — platforms that MOVE.** Some ledges slide back and
+  forth across a gap too wide to jump, and some go up and down like a lift. You
+  stand on one and it carries you. The whole level is built around waiting for
+  the right moment instead of just aiming.
+  (Notes: [`docs/adr/20260817-moving-platforms-level-3/`](docs/adr/20260817-moving-platforms-level-3/README.md))
 
 ## ✅ Done
 
@@ -51,7 +55,6 @@ _Good starting points — each is small enough to finish in one sitting._
 ## 🌟 Someday / bigger
 
 - [ ] Enemies that walk back and forth
-- [ ] Moving platforms
 - [ ] A double-jump that leaves sparkles
 - [ ] Real drawn artwork instead of colored shapes
 - [ ] Background music
