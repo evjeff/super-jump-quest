@@ -10,7 +10,21 @@ export default defineConfig({
     baseURL: 'http://localhost:4173',
     trace: 'on-first-retry',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    // The keyboard game, on a computer.
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+      testIgnore: /touch\.spec\.ts/,
+    },
+    // The touch game, on a real phone screen size with real touch events.
+    // Landscape, because that's how the game asks to be held.
+    {
+      name: 'phone',
+      use: { ...devices['Pixel 7 landscape'] },
+      testMatch: /touch\.spec\.ts/,
+    },
+  ],
   webServer: {
     command: 'pnpm run build && pnpm run preview --port 4173 --strictPort',
     url: 'http://localhost:4173',

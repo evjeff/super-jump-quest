@@ -1,4 +1,15 @@
 import { expect, test } from '@playwright/test'
+import type { GameProbe } from './probe'
+import {
+  banner,
+  collectCoins,
+  hud,
+  levelTimeMs,
+  playerIsGrounded,
+  playerY,
+  waitForGameScene,
+  watchForErrors,
+} from './probe'
 
 /**
  * The single most valuable guardrail in this repo.
@@ -11,11 +22,7 @@ import { expect, test } from '@playwright/test'
  */
 
 test('the game boots and reaches the playable scene', async ({ page }) => {
-  const consoleErrors: string[] = []
-  page.on('console', (message) => {
-    if (message.type() === 'error') consoleErrors.push(message.text())
-  })
-  page.on('pageerror', (error) => consoleErrors.push(error.message))
+  const consoleErrors = watchForErrors(page)
 
   await page.goto('/')
 
@@ -44,11 +51,7 @@ test('the game boots and reaches the playable scene', async ({ page }) => {
 })
 
 test('the player can jump', async ({ page }) => {
-  const consoleErrors: string[] = []
-  page.on('console', (message) => {
-    if (message.type() === 'error') consoleErrors.push(message.text())
-  })
-  page.on('pageerror', (error) => consoleErrors.push(error.message))
+  const consoleErrors = watchForErrors(page)
 
   await page.goto('/')
 
@@ -152,11 +155,7 @@ test('jumping actually plays a note', async ({ page }) => {
  * same thing.
  */
 test('finishing a level starts the next one, and finishing the last one wins', async ({ page }) => {
-  const consoleErrors: string[] = []
-  page.on('console', (message) => {
-    if (message.type() === 'error') consoleErrors.push(message.text())
-  })
-  page.on('pageerror', (error) => consoleErrors.push(error.message))
+  const consoleErrors = watchForErrors(page)
 
   await page.goto('/')
   await expect
@@ -172,7 +171,7 @@ test('finishing a level starts the next one, and finishing the last one wins', a
   // the checks below would see it.
   await page.waitForTimeout(1500)
 
-  await collectEveryCoin(page)
+  await collectCoins(page)
   expect(await banner(page)).toContain('LEVEL 1 DONE!')
 
   // The points he earned in level 1 have to travel with him into level 2.
@@ -200,7 +199,7 @@ test('finishing a level starts the next one, and finishing the last one wins', a
   // Dawdle again, so the same check after R has something to catch.
   await page.waitForTimeout(1500)
 
-  await collectEveryCoin(page)
+  await collectCoins(page)
   expect(await banner(page)).toContain('YOU WIN!')
 
   await holdKey(page, 'KeyR')
@@ -230,7 +229,7 @@ test('R starts the game over in the middle of a level', async ({ page }) => {
 
   // One coin, so there is something for the restart to wipe, and six left over
   // so the level is still being played rather than finished.
-  await collectFirstCoin(page)
+  await collectCoins(page, 1)
   expect(await hud(page)).not.toContain('SCORE 00000')
   expect(await banner(page)).toBe('')
 
@@ -251,11 +250,7 @@ test('R starts the game over in the middle of a level', async ({ page }) => {
 test('the level clock runs, stops at the finish, and the best time is remembered', async ({
   page,
 }) => {
-  const consoleErrors: string[] = []
-  page.on('console', (message) => {
-    if (message.type() === 'error') consoleErrors.push(message.text())
-  })
-  page.on('pageerror', (error) => consoleErrors.push(error.message))
+  const consoleErrors = watchForErrors(page)
 
   await page.goto('/')
   await waitForGameScene(page)
@@ -270,11 +265,11 @@ test('the level clock runs, stops at the finish, and the best time is remembered
   expect(await hud(page)).not.toBe(atStart)
 
   // Finishing stops it dead: the banner must not sit there racking up time.
-  await collectEveryCoin(page)
+  await collectCoins(page)
   expect(await banner(page)).toContain('NEW BEST TIME!')
-  const atFinish = await levelTime(page)
+  const atFinish = await levelTimeMs(page)
   await page.waitForTimeout(500)
-  expect(await levelTime(page)).toBe(atFinish)
+  expect(await levelTimeMs(page)).toBe(atFinish)
 
   // The number written down has to be the number the clock showed. Take the
   // time straight off the banner and insist the record matches it, so a game
@@ -308,66 +303,9 @@ declare global {
   }
 }
 
-type PlayerProbe = { player?: { y: number; body?: { blocked: { down: boolean } } } }
-
-type CoinSprite = { x: number; y: number; active: boolean; setPosition(x: number, y: number): void }
-type LevelProbe = {
-  player: { setVelocity(x: number, y: number): void } & CoinSprite
-  coins: { getChildren(): CoinSprite[] }
-  hud: { text: string }
-  banner: { text: string }
-  level: { coins: unknown[]; platforms: unknown[] }
-  jumpState: { jumpsUsed: number }
-  squashStartedAt: number
-  levelTimeMs: number
-}
-
-/**
- * Wait until the Game scene has finished building itself.
- *
- * Being "active" isn't enough after a reload: for a frame or two the scene
- * exists but its HUD doesn't, and reading text off nothing throws.
- */
-async function waitForGameScene(page: import('@playwright/test').Page): Promise<void> {
-  await expect
-    .poll(
-      () =>
-        page.evaluate(() => {
-          const scene = window.__GAME__?.scene.getScene('Game') as unknown as {
-            hud?: { text?: string }
-          } | null
-          return typeof scene?.hud?.text === 'string'
-        }),
-      { timeout: 15_000 },
-    )
-    .toBe(true)
-}
-
-/** Milliseconds on the level clock right now. */
-async function levelTime(page: import('@playwright/test').Page): Promise<number> {
-  return page.evaluate(() => {
-    const scene = window.__GAME__?.scene.getScene('Game') as unknown as LevelProbe
-    return scene.levelTimeMs
-  })
-}
-
-async function hud(page: import('@playwright/test').Page): Promise<string> {
-  return page.evaluate(() => {
-    const scene = window.__GAME__?.scene.getScene('Game') as unknown as LevelProbe
-    return scene.hud.text
-  })
-}
-
-async function banner(page: import('@playwright/test').Page): Promise<string> {
-  return page.evaluate(() => {
-    const scene = window.__GAME__?.scene.getScene('Game') as unknown as LevelProbe
-    return scene.banner.text
-  })
-}
-
 async function levelState(page: import('@playwright/test').Page) {
   return page.evaluate(() => {
-    const scene = window.__GAME__?.scene.getScene('Game') as unknown as LevelProbe
+    const scene = window.__GAME__?.scene.getScene('Game') as unknown as GameProbe
     return {
       hud: scene.hud.text,
       banner: scene.banner.text,
@@ -381,37 +319,6 @@ async function levelState(page: import('@playwright/test').Page) {
   })
 }
 
-/** Finish a level without playing it: park him on each coin, one frame apart. */
-async function collectEveryCoin(page: import('@playwright/test').Page): Promise<void> {
-  await page.evaluate(async () => {
-    const scene = window.__GAME__?.scene.getScene('Game') as unknown as LevelProbe
-    const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
-    for (const coin of [...scene.coins.getChildren()]) {
-      if (!coin.active) continue
-      scene.player.setVelocity(0, 0)
-      scene.player.setPosition(coin.x, coin.y)
-      await nextFrame()
-      await nextFrame()
-    }
-  })
-}
-
-/** Park him on the first coin only, leaving the rest of the level unfinished. */
-async function collectFirstCoin(page: import('@playwright/test').Page): Promise<void> {
-  await page.evaluate(async () => {
-    const scene = window.__GAME__?.scene.getScene('Game') as unknown as LevelProbe
-    const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
-    const coin = scene.coins.getChildren()[0]
-    // A level with no coins would leave the score at zero, and the check back
-    // in the test says so out loud rather than passing on an empty level.
-    if (!coin) return
-    scene.player.setVelocity(0, 0)
-    scene.player.setPosition(coin.x, coin.y)
-    await nextFrame()
-    await nextFrame()
-  })
-}
-
 async function holdKey(page: import('@playwright/test').Page, key: string): Promise<void> {
   await page.keyboard.down(key)
   await page.waitForTimeout(80)
@@ -420,18 +327,4 @@ async function holdKey(page: import('@playwright/test').Page, key: string): Prom
 
 async function notesPlayed(page: import('@playwright/test').Page): Promise<number> {
   return page.evaluate(() => window.__NOTES_PLAYED__ ?? 0)
-}
-
-async function playerY(page: import('@playwright/test').Page): Promise<number> {
-  return page.evaluate(() => {
-    const scene = window.__GAME__?.scene.getScene('Game') as unknown as PlayerProbe | undefined
-    return scene?.player?.y ?? Number.NaN
-  })
-}
-
-async function playerIsGrounded(page: import('@playwright/test').Page): Promise<boolean> {
-  return page.evaluate(() => {
-    const scene = window.__GAME__?.scene.getScene('Game') as unknown as PlayerProbe | undefined
-    return scene?.player?.body?.blocked.down ?? false
-  })
 }

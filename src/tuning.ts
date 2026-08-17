@@ -69,6 +69,53 @@ export const TUNING = {
     landingCooldownMs: 250,
   },
 
+  /**
+   * The buttons a phone plays with. They only appear on a touchscreen — on a
+   * computer the keyboard is still the whole story and none of this shows up.
+   *
+   * Sizes are measured from the middle of a button to its edge, on the same
+   * 960 × 540 grid the levels use. Bigger = easier to hit, but more of the
+   * game hidden underneath.
+   */
+  touch: {
+    /** The ◀ and ▶ buttons, bottom left. */
+    buttonRadius: 52,
+
+    /** JUMP, bottom right. It's the one you press most, so it's the biggest. */
+    jumpButtonRadius: 60,
+
+    /** The little ↻ start-over button, up in the far corner away from thumbs. */
+    restartButtonRadius: 22,
+
+    /** How far in from the edge of the screen the buttons sit. */
+    edgeMargin: 24,
+
+    /**
+     * The gap between ◀ and ▶. Bigger if a thumb keeps catching both at once.
+     */
+    directionGap: 12,
+
+    /**
+     * How see-through the buttons are. 0 = invisible, 1 = solid.
+     * Low on purpose: you should be able to watch him run right through one.
+     */
+    opacity: 0.55,
+
+    /**
+     * How long the finish banner ignores taps for, in milliseconds.
+     *
+     * A finger that never leaves the screen is already not a tap — that's
+     * `newFingerLanded` in `src/game/touchControls.ts`, and it needs no help.
+     * What this pause buys is the reflex: you grab the last coin, and your
+     * thumb presses ▲ again a tenth of a second later out of pure habit. That
+     * IS a new finger landing, and without the pause it would wipe away a "NEW
+     * BEST TIME!" nobody got to read.
+     *
+     * Smaller = the banner gets out of your way sooner.
+     */
+    bannerTapDelayMs: 400,
+  },
+
   world: {
     width: 960,
     height: 540,
@@ -84,5 +131,8 @@ export const TUNING = {
     platform: 0x3d5a80,
     coin: 0xf4a261,
     text: '#e8e8f0',
+
+    /** The on-screen buttons on a phone. See `touch.opacity` for how faint they are. */
+    touchButton: 0xe8e8f0,
   },
 } as const

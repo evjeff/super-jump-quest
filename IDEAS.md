@@ -30,6 +30,12 @@ _(nothing yet — pick something from below)_
   straight into it: a hole in the ground to jump across, a staircase climbing
   into the sky, and one coin so high up that only a triple jump gets it. Your
   score keeps counting up across both levels, and R starts the whole thing over
+- **It works on a phone.** Turn the phone sideways and the game draws its own
+  buttons: ◀ ▶ under your left thumb, a big ▲ under your right, and a little ↻
+  in the corner to start over. Two thumbs at once, so you can run and jump
+  together. Finish a level and you tap the screen to carry on instead of
+  pressing N. Nothing changed on a computer — the keyboard works exactly the
+  same as before
 - A clock in the corner, counting the seconds on the level you're playing — it
   stops the moment you grab the last coin, and the game remembers your fastest
   finish on each level even after you close the tab, so there's always a time
@@ -51,7 +57,6 @@ _Good starting points — each is small enough to finish in one sitting._
 - [ ] Background music
 - [ ] A boss at the end
 - [ ] Power-ups (super speed, super jump, shield)
-- [ ] Touch controls so it works on a phone
 
 ## ❓ Questions to figure out
 

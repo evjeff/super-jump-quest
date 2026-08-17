@@ -2,7 +2,18 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      `user-scalable=no` and `viewport-fit=cover` are here for phones: pinching
+      the game bigger only ever moves the buttons out from under your thumbs,
+      and the game already scales itself to whatever screen it's given.
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#12121c" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
     <title>Super Jump Quest</title>
     <style>
       :root {
@@ -12,8 +23,15 @@
         box-sizing: border-box;
       }
       body {
+        /* How much of the screen's height ISN'T the game: the footer and the
+           padding around it. The game's width is worked out from what's left. */
+        --page-chrome: 72px;
+        /* The game's own picture size. See `#game` below. */
+        --max-width: 960px;
+
         margin: 0;
-        min-height: 100vh;
+        min-height: 100dvh;
+        padding: 8px;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -22,20 +40,126 @@
         background: #12121c;
         color: #e8e8f0;
         font-family: ui-monospace, "Cascadia Code", "Source Code Pro", monospace;
+
+        /* On a phone, a finger on the screen is playing the game — it must not
+           scroll the page, drag it downwards to refresh, or select the text. */
+        touch-action: none;
+        overscroll-behavior: none;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
       }
       #game {
+        /* The game is a fixed 16:9 picture. Make it as wide as the screen
+           allows, but never so tall that it pushes the footer off the bottom —
+           on a phone held sideways, height is what runs out first.
+
+           `--max-width` is the game's own 960, so a big monitor shows it at its
+           natural size with crisp edges rather than blowing it up soft. A phone
+           lifts that cap: there, filling the screen matters more. */
+        width: min(var(--max-width), 100%, calc((100dvh - var(--page-chrome)) * 960 / 540));
+        aspect-ratio: 960 / 540;
         line-height: 0;
         border-radius: 8px;
         overflow: hidden;
         box-shadow: 0 12px 40px rgb(0 0 0 / 55%);
       }
-      #game canvas {
-        max-width: 100%;
-        height: auto;
-      }
       footer {
         font-size: 13px;
         opacity: 0.6;
+        text-align: center;
+      }
+
+      /* --- phones and tablets ------------------------------------------- */
+
+      /* A coarse pointer means a finger. The game draws its own buttons then,
+         so the keyboard footer is just height stolen from the picture.
+
+         `wantsTouchControls` in src/scenes/TouchPad.ts asks this exact same
+         question before it draws those buttons. CSS can't read a TypeScript
+         constant, so the two have to be kept in step by hand — change one and
+         change the other, or the game shows finger buttons under keyboard
+         instructions. */
+      @media (pointer: coarse) {
+        body {
+          /* No footer here, but the notch and the home bar still cost height —
+             and they have to be counted, not just padded around. Padding alone
+             would let the column grow past the screen, and since it is centred
+             it overflows at BOTH ends: the top of the score would slide off,
+             with no way to scroll it back because scrolling is switched off. */
+          --page-chrome: calc(env(safe-area-inset-top) + env(safe-area-inset-bottom));
+          /* No cap: on a phone or tablet, filling the screen beats crisp edges. */
+          --max-width: 100%;
+          gap: 0;
+          /* Keep the buttons out from under a notch or a home bar. On anything
+             without one, all four of these are zero and nothing moves. */
+          padding: env(safe-area-inset-top) env(safe-area-inset-right)
+            env(safe-area-inset-bottom) env(safe-area-inset-left);
+        }
+        footer {
+          display: none;
+        }
+        #game {
+          border-radius: 0;
+          box-shadow: none;
+        }
+      }
+
+      /* Held upright, a 16:9 game is a letterbox slot with the buttons crammed
+         into it. Ask for a turn instead. `src/main.ts` sends the game to sleep
+         while this card is up — everything stays exactly where it was, so
+         turning back picks up mid-jump. */
+      #rotate {
+        display: none;
+      }
+      /* Keyframes are global wherever they are written, so this lives out here
+         rather than inside the media query below, where the indentation would
+         promise a scope that doesn't exist. */
+      @keyframes turn-it {
+        0%,
+        25% {
+          transform: rotate(0deg);
+        }
+        55%,
+        100% {
+          transform: rotate(90deg);
+        }
+      }
+      @media (pointer: coarse) and (orientation: portrait) {
+        #rotate {
+          position: fixed;
+          inset: 0;
+          z-index: 10;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 24px;
+          padding: 32px;
+          text-align: center;
+          background: #12121c;
+          font-size: 22px;
+          line-height: 1.5;
+          touch-action: none;
+        }
+        /* A phone, drawn rather than written: an emoji would be at the mercy of
+           whatever fonts the device happens to have, and a missing one shows up
+           as an empty box. This is always a phone. */
+        #rotate .phone {
+          width: 68px;
+          height: 116px;
+          border: 4px solid #e8e8f0;
+          border-radius: 12px;
+          /* It turns, over and over, showing what to do rather than saying it —
+             which matters when the person holding it is still learning to read. */
+          animation: turn-it 2.6s ease-in-out infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          #rotate .phone {
+            animation: none;
+            transform: rotate(90deg);
+          }
+        }
       }
     </style>
   </head>
@@ -45,6 +169,11 @@
       Arrows or WASD to move &middot; Space to jump, twice more in mid-air for a triple jump
       &middot; N for the next level &middot; R to start over
     </footer>
+    <div id="rotate">
+      <!-- Drawn by the CSS above, not written: see the note on `.phone`. -->
+      <div class="phone"></div>
+      <div>Turn your phone sideways to play</div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

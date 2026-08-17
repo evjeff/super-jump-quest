@@ -82,10 +82,14 @@ Use `pnpm`, not `npm` — the lockfile is `pnpm-lock.yaml` and CI runs
 2. **New rule or mechanic?** Pure function in `src/game/` plus a Vitest test
    first, then wire it into a scene.
 3. **New level content?** Edit `src/levels/`. It is data, not code.
-4. **A new sound?** Add a recipe to `src/game/sounds.ts` — pitches, durations and
+4. **Something about the phone buttons?** Sizes and opacity are in the `touch`
+   block of `src/tuning.ts`; where the buttons go and what a finger is on is
+   `src/game/touchControls.ts`; the drawing is `src/scenes/TouchPad.ts`. See
+   `docs/adr/20260816-touch-controls-for-phones/`.
+5. **A new sound?** Add a recipe to `src/game/sounds.ts` — pitches, durations and
    volumes, not audio files. Do not add `.wav`/`.mp3` assets; see
    `docs/adr/20260816-synthesized-sound-effects/`.
-5. Build **one** idea at a time, end to end, before starting the next. Ideas
+6. Build **one** idea at a time, end to end, before starting the next. Ideas
    queue in `IDEAS.md`. A finished small feature beats three half-built ones —
    this is the single biggest reason hobby game projects die.
 

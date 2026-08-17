@@ -24,6 +24,11 @@ instantly — no refresh needed.
 mid-air for a triple jump. `N` starts the next level when you finish one, and
 `R` starts the whole game over from level 1.
 
+**On a phone:** turn it sideways and the game draws its own buttons — ◀ ▶ under
+your left thumb, a big ▲ under your right, and a small ↻ in the corner to start
+over. Both thumbs work at once, so you can run and jump together. When you
+finish a level, tap the screen to carry on.
+
 The clock in the corner times the level you're on and stops when you grab the
 last coin. Your fastest finish on each level is remembered in your browser, so
 there's always a time to beat.
@@ -43,6 +48,7 @@ matters, each with a comment explaining what it does:
 | Jump even more times | `player.maxJumps` | `5` |
 | A different colored sky | `colors.sky` | `0x2d1b4e` |
 | Turn the sound off | `sound.volume` | `0` |
+| Bigger buttons on a phone | `touch.buttonRadius` | `70` |
 
 Nothing in that file can break the game. Try ridiculous numbers — that's the fun part.
 
@@ -101,6 +107,7 @@ until the kid asks to play it.*
 | **Biome** | Formatting drift, unused code, `any`, common mistakes |
 | **Vitest** (90% coverage on `src/game/`) | Broken game rules, e.g. double-jump silently stops working |
 | **Playwright smoke test** | A black screen. Boots the real game and jumps the player. |
+| **Playwright phone test** | A game that can't be played on a phone. Real touch events, two thumbs at once. |
 | **GitHub Actions CI** | All of the above, on every pull request |
 | **CodeQL** | Security and correctness defects a linter can't see |
 | **Dependabot** | Outdated and vulnerable dependencies, weekly |
