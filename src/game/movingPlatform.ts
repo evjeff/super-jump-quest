@@ -96,6 +96,28 @@ export function platformPosition(platform: Movable, elapsedMs: number): Point {
 }
 
 /**
+ * How fast this platform is going right now, in pixels per second.
+ *
+ * Steady speed, turning round at each end: the distance divided by the time,
+ * pointing one way on the trip out and the other way on the trip back.
+ *
+ * This is what a passenger takes with him when he jumps. Once he is in the air
+ * he keeps the speed he left with, so a ferry turning round underneath him
+ * doesn't turn HIM round in mid-air.
+ */
+export function platformVelocity(platform: Movable, elapsedMs: number): Point {
+  const moves = platform.moves
+  if (!moves || !(moves.seconds > 0)) return { x: 0, y: 0 }
+
+  const { moveX = 0, moveY = 0, seconds, startAt = 0 } = moves
+
+  const phase = (((elapsedMs / 1000 / seconds + startAt) % 2) + 2) % 2
+  const heading = phase < 1 ? 1 : -1
+
+  return { x: (moveX / seconds) * heading, y: (moveY / seconds) * heading }
+}
+
+/**
  * Is he standing on this platform?
  *
  * Two questions at once: are his feet at the height of the deck, and is any

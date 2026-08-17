@@ -4,7 +4,7 @@ import { createBeeper, webAudioOutput } from '../audio/beeper'
 import type { JumpState } from '../game/jump'
 import { canJump, createJumpState, justLanded, registerJump, syncGrounded } from '../game/jump'
 import { facingDirection, horizontalVelocity } from '../game/movement'
-import { isStandingOn, platformPosition } from '../game/movingPlatform'
+import { isStandingOn, platformPosition, platformVelocity } from '../game/movingPlatform'
 import type { ControlHint, Progress } from '../game/progress'
 import { afterLevel, bannerText } from '../game/progress'
 import type { ScoreState } from '../game/score'
@@ -47,6 +47,15 @@ export class GameScene extends Phaser.Scene {
    * He keeps it while he is in the air — see `updateRide`.
    */
   private ride: MovingPlatform | null = null
+  /** Whether his feet are actually down on that ride, as opposed to over it. */
+  private feetOnRide = false
+  /**
+   * How fast the deck was going sideways when he last had his feet on it.
+   *
+   * Jumping keeps this speed rather than following the platform, so a ferry
+   * turning round below him doesn't turn him round in mid-air.
+   */
+  private rideVelocityX = 0
   private hud!: Phaser.GameObjects.Text
   private banner!: Phaser.GameObjects.Text
 
@@ -114,6 +123,8 @@ export class GameScene extends Phaser.Scene {
     this.outcome = null
     this.bannerShownAt = 0
     this.ride = null
+    this.feetOnRide = false
+    this.rideVelocityX = 0
     // A fresh clock every time a level starts — and that's every time this runs,
     // whether he pressed N for the next level or R to start the whole game over.
     this.levelTimeMs = 0
@@ -159,7 +170,7 @@ export class GameScene extends Phaser.Scene {
     // Asked BEFORE the platforms are moved on, so it compares where his feet
     // are with where the deck was underneath them this frame.
     this.updateRide()
-    this.movePlatforms()
+    this.movePlatforms(delta)
     this.handleMovement()
     this.handleJumping()
     this.handleFalling()
@@ -364,25 +375,31 @@ export class GameScene extends Phaser.Scene {
    * It runs straight after the clock is advanced, and only while he's playing:
    * the clock stops when the finish banner goes up, so the platforms stop too.
    */
-  private movePlatforms(): void {
+  private movePlatforms(deltaMs: number): void {
     for (const platform of this.movingPlatforms) {
       const { sprite, spec } = platform
       const { x, y } = platformPosition(spec, this.platformClock)
 
-      // If this is the one he's riding, he goes exactly where it goes — moved
+      // Feet down on the one he's riding: he goes exactly where it goes, moved
       // by the platform's own step rather than handed its speed and left to
       // the physics to work out. Both numbers then come from the same clock,
-      // so there is nothing for them to drift apart by, on a fast machine or
-      // a slow one. Giving him the speed instead was out by seven pixels after
+      // so there is nothing for them to drift apart by, on a fast machine or a
+      // slow one. Giving him the speed instead was out by seven pixels after
       // three jumps on a busy laptop, and nothing pulls that error back.
       //
       // Sideways only. Up and down is the collision's job: a rising platform
       // pushes him up all by itself, and doing it here as well would lift him
       // twice.
-      if (platform === this.ride) this.player.x += x - sprite.x
+      if (platform === this.ride && this.feetOnRide) this.player.x += x - sprite.x
 
       sprite.setPosition(x, y)
     }
+
+    // In the air above it, he keeps the speed the deck had when he left, and
+    // ignores what it does next. Following it would mean a ferry reaching the
+    // end of its trip while he was mid-jump would turn him round in mid-air,
+    // which is not something a jump should be able to do.
+    if (this.ride && !this.feetOnRide) this.player.x += this.rideVelocityX * (deltaMs / 1000)
   }
 
   /**
@@ -410,6 +427,7 @@ export class GameScene extends Phaser.Scene {
    */
   private updateRide(): void {
     const body = this.player.body as Phaser.Physics.Arcade.Body
+    this.feetOnRide = false
 
     for (const platform of this.movingPlatforms) {
       const { sprite, spec } = platform
@@ -422,6 +440,11 @@ export class GameScene extends Phaser.Scene {
 
       if (isStandingOn(body, deck)) {
         this.ride = platform
+        this.feetOnRide = true
+        // Remembered every frame his feet are down, so the moment he jumps it
+        // already holds the speed he is leaving with.
+        this.rideVelocityX =
+          platformVelocity(spec, this.platformClock).x * TUNING.platforms.movingSpeed
         return
       }
     }
@@ -435,7 +458,10 @@ export class GameScene extends Phaser.Scene {
     // One of those used to end the ride 37 pixels above the deck, and by the
     // time his feet found it again the ferry was ten pixels further on — which
     // is exactly the drift this whole thing is here to stop.
-    if (body.blocked.down) this.ride = null
+    if (body.blocked.down) {
+      this.ride = null
+      this.rideVelocityX = 0
+    }
   }
 
   private handleMovement(): void {
@@ -472,7 +498,16 @@ export class GameScene extends Phaser.Scene {
 
   private handleJumping(): void {
     const body = this.player.body as Phaser.Physics.Arcade.Body
-    const onGround = body.blocked.down || body.touching.down
+    // `feetOnRide` is in here because the collision flags flicker on a platform
+    // that is moving under him: he sinks a fraction into the deck, gets pushed
+    // back out, and the little bounce that follows counts as leaving the floor
+    // and landing on it again. That makes him squash over and over while he is
+    // just standing there riding, which looks like a fault in the game.
+    //
+    // Asking where his feet ARE instead of what the collision did this frame
+    // is steady: it allows a few pixels of slack, and a bounce off a deck is
+    // about one.
+    const onGround = body.blocked.down || body.touching.down || this.feetOnRide
 
     // Ask before syncing, while the state still remembers he was airborne.
     if (justLanded(this.jumpState, onGround)) {
@@ -517,6 +552,8 @@ export class GameScene extends Phaser.Scene {
       this.squashStartedAt = Number.NEGATIVE_INFINITY
       // ...and not still being carried by the ferry he fell off.
       this.ride = null
+      this.feetOnRide = false
+      this.rideVelocityX = 0
     }
   }
 

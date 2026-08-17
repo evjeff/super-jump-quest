@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isStandingOn, platformPosition } from './movingPlatform'
+import { isStandingOn, platformPosition, platformVelocity } from './movingPlatform'
 
 /** A ferry that slides 300 to the right and back, three seconds each way. */
 const FERRY = { x: 100, y: 400, moves: { moveX: 300, seconds: 3 } }
@@ -96,6 +96,41 @@ describe('platformPosition', () => {
     // so every platform sits at home and the level goes still.
     expect(platformPosition(FERRY, 0)).toEqual({ x: 100, y: 400 })
     expect(platformPosition(LIFT, 0)).toEqual({ x: 700, y: 450 })
+  })
+})
+
+describe('platformVelocity', () => {
+  it('is nothing at all for a platform that does not move', () => {
+    expect(platformVelocity({ x: 480, y: 520 }, 1000)).toEqual({ x: 0, y: 0 })
+  })
+
+  it('is the distance divided by the time, going out', () => {
+    expect(platformVelocity(FERRY, 0).x).toBeCloseTo(100)
+    expect(platformVelocity(FERRY, 1500).x).toBeCloseTo(100)
+  })
+
+  it('turns round when the platform does', () => {
+    expect(platformVelocity(FERRY, 4500).x).toBeCloseTo(-100)
+    // ...and back again on the next trip out.
+    expect(platformVelocity(FERRY, 7500).x).toBeCloseTo(100)
+  })
+
+  it('matches the distance the platform actually covers', () => {
+    // The honest check: speed times time is the distance it really travels.
+    const step = 10
+    const before = platformPosition(FERRY, 1000)
+    const after = platformPosition(FERRY, 1000 + step)
+    expect(platformVelocity(FERRY, 1000).x * (step / 1000)).toBeCloseTo(after.x - before.x, 5)
+  })
+
+  it('goes the other way for a lift, and turns round too', () => {
+    expect(platformVelocity(LIFT, 0).y).toBeCloseTo(-100)
+    expect(platformVelocity(LIFT, 3000).y).toBeCloseTo(100)
+  })
+
+  it('stands still rather than dividing by nothing when the trip takes no time', () => {
+    const instant = { x: 10, y: 20, moves: { moveX: 300, seconds: 0 } }
+    expect(platformVelocity(instant, 5000)).toEqual({ x: 0, y: 0 })
   })
 })
 

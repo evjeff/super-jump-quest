@@ -4,7 +4,7 @@
 
 - **State:** `[COMPLETE]`
 - **Last updated:** 2026-08-17
-- **Next action:** Play it again now the ride is rebuilt. See `review.md`.
+- **Next action:** Play it again now the reversal and squashing are fixed.
 
 Read `plan.md` for why each of these is shaped the way it is.
 
@@ -44,8 +44,9 @@ that the ride did not, in fact, work.
 - [x] **11. Words.** `IDEAS.md` and `README.md`.
 - [x] **12. Play it.** Played, and it found the thing none of the tests could:
       the ride felt wrong. See the notes.
-- [ ] **13. Play it again**, now that the ride has been rebuilt. Still the one
-      thing that can't be automated.
+- [x] **13. Play it again.** Found two more, both mine, both from the rebuild —
+      see the notes.
+- [ ] **14. Play it a third time.** Still the one thing that can't be automated.
 
 ## Notes as we go
 
@@ -103,3 +104,24 @@ that the ride did not, in fact, work.
      above the deck and cost ten pixels — the very drift being fixed, put back
      by the fix. A frame-by-frame trace is what found it; the symptom was a
      suspiciously round, suspiciously repeatable 10.26.
+
+- **The second playthrough found two more, and both came from the fix for the
+  first.** Keeping the ride through a jump was right; the details were not.
+  1. **He followed the ferry while airborne**, so a ferry reaching the end of
+     its trip mid-jump swept him back the other way in mid-air. He now takes the
+     speed the deck had at the moment he left it and keeps that — which is what
+     being thrown from a moving thing does, and still lands him on the plank he
+     took off from.
+  2. **Riding a lift squashed him over and over.** A deck moving under his feet
+     makes Arcade's contact flags flicker, and every flicker reads as a fresh
+     landing. Fixed by letting "his feet are on a deck he is riding" count as
+     standing on the ground: a question about where he is, not about what the
+     collision did this frame. Measured at 0 landings across two full trips, from
+     2 before — and what a player saw was worse than 2, because arriving with a
+     real bounce makes it flicker more.
+
+- **A test that was right about the game and wrong about itself.** The "lands on
+  the same plank" check jumped three times, which spans a turnaround — and after
+  fix 1 a jump across a turnaround *should* land him elsewhere on the deck. It
+  now takes off just after the ferry turns, so the jump has clear runway, and
+  the turnaround has a test of its own.

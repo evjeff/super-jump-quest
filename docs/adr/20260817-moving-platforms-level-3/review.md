@@ -4,21 +4,23 @@
 
 - **State:** `[COMPLETE]`
 - **Last updated:** 2026-08-17
-- **Next action:** Play level 3 again now the ride is rebuilt. See "Still open".
+- **Next action:** Play level 3 again now the reversal and squashing are fixed.
 
 ## What was checked
 
 | Check | Result |
 |---|---|
-| `pnpm check` (typecheck, lint, unit tests, build) | Green. 147 unit tests, up from 128. |
-| `pnpm test:e2e` | Green. 18 browser tests, up from 15. Run five times over, no flakes. |
-| Coverage on `src/game/` | Still over its thresholds; `movingPlatform.ts` has 19 cases. |
+| `pnpm check` (typecheck, lint, unit tests, build) | Green. 153 unit tests, up from 128. |
+| `pnpm test:e2e` | Green. 20 browser tests, up from 15. Run four times over, no flakes. |
+| Coverage on `src/game/` | Still over its thresholds; `movingPlatform.ts` has 25 cases. |
 | Levels 1 and 2 | Unchanged files. Their tests and the phone tests pass untouched. |
 | Riding, sideways | His place on the deck does not move at all — under 1px over a full crossing. |
-| Riding, through three jumps | Under 2px, from a hundred per jump before the ride was rebuilt. |
+| Riding, through a jump | Under 2px, from a hundred before the ride was rebuilt. |
 | Riding, up and down | 217.4 to the lift's 216.3 across a turnaround, ≤4.5px drift, one landing. |
 | Every jump in level 3, by keyboard | Boarding the ferry, lift → shelf, shelf → sky ferry: all landed. |
-| **Played by a person** | Once. It rejected the ride — see below. Not played again since the rebuild. |
+| Riding, mid-air turnaround | The ferry reverses under him; he carries straight on. |
+| Riding a lift, two full trips | 0 landings, arriving with a real bounce. Was 2, and felt like more. |
+| **Played by a person** | Twice. Each time it found something no test had. Not played since the last fix. |
 
 ## What playing it found
 
@@ -40,6 +42,15 @@ The rebuild — the ride now survives a jump — is in the ADR, and it took two
 wrong turns worth remembering: handing him the platform's *speed* rather than
 its *step* (drifts under load, nothing corrects it), and ending the ride on
 `touching.down` (true for stray frames mid-fall, put the drift straight back).
+
+**The second playthrough then found two more, both created by that fix.** He
+followed the ferry while airborne, so a ferry turning round mid-jump turned him
+round in mid-air; he now keeps the speed he left with instead. And riding a lift
+squashed him over and over, because a deck moving under his feet makes the
+contact flags flicker and every flicker reads as a landing; "feet on a deck I am
+riding" now counts as standing on the ground.
+
+Two playthroughs, four faults, none of them visible to a green test suite.
 
 ## What the checks found
 
@@ -80,11 +91,13 @@ is what the game ended up with — but instead of Phaser's, never alongside it.
 
 ## Still open
 
-- **Level 3 has not been played since the ride was rebuilt.** It was played
-  once, which is how the drift was found; the fix has been measured but not
-  felt. Nobody has yet played it start to finish either — whether the waiting
-  for a ferry drags, and whether purple-means-it-moves reads at speed, are still
-  open questions that no test answers.
+- **Level 3 has not been played since the last two fixes.** It has been played
+  twice, and each time it found a real fault that every green test had missed —
+  first the sliding, then the mid-air reversal and the repeated squashing. That
+  is now the strongest evidence in this package that playing it is worth more
+  than another measurement. Nobody has played it start to finish either —
+  whether the waiting for a ferry drags, and whether purple-means-it-moves reads
+  at speed, are still open questions no test answers.
 - **If the waiting drags,** the first thing to reach for is
   `platforms.movingSpeed` in `tuning.ts` rather than the level file — it moves
   every platform at once and is meant to be played with.

@@ -407,37 +407,167 @@ test('jumping aboard a moving platform leaves him on the same plank', async ({ p
   await waitForGameScene(page)
   await goToLevel(page, 2)
 
-  // Stand him on the ferry and let him settle.
-  await page.evaluate(async () => {
+  const out = await page.evaluate(async () => {
     const scene = window.__GAME__?.scene.getScene('Game') as unknown as GameProbe
     const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
     const ferry = scene.movingPlatforms[0] as GameProbe['movingPlatforms'][0]
+
     scene.player.setVelocity(0, 0)
     scene.player.setPosition(ferry.sprite.x, ferry.sprite.y - 40)
     for (let i = 0; i < 40; i += 1) await nextFrame()
+
+    // Take off just after the ferry turns round, so it is heading one way for
+    // the whole jump. A jump that straddles a turnaround genuinely does put him
+    // down somewhere else on the deck — he keeps the speed he left with while
+    // the ferry goes back — and that is the subject of its own test.
+    let previous = ferry.sprite.x
+    let heading = 0
+    for (let i = 0; i < 1200; i += 1) {
+      await nextFrame()
+      const step = Math.sign(ferry.sprite.x - previous)
+      previous = ferry.sprite.x
+      if (step === 0) continue
+      if (heading !== 0 && step !== heading) break
+      heading = step
+    }
+
+    const before = scene.player.x - ferry.sprite.x
+    const startedOnDeck = scene.player.body.blocked.down
+
+    // One full jump, straight up, nothing else pressed.
+    scene.player.setVelocity(0, -520)
+    await nextFrame()
+    for (let i = 0; i < 300 && !scene.player.body.blocked.down; i += 1) await nextFrame()
+    for (let i = 0; i < 5; i += 1) await nextFrame()
+
+    return {
+      before,
+      after: scene.player.x - ferry.sprite.x,
+      startedOnDeck,
+      endedOnDeck: scene.player.body.blocked.down,
+    }
   })
 
-  const gap = () =>
-    page.evaluate(() => {
-      const scene = window.__GAME__?.scene.getScene('Game') as unknown as GameProbe
-      const ferry = scene.movingPlatforms[0] as GameProbe['movingPlatforms'][0]
-      return { gap: scene.player.x - ferry.sprite.x, onDeck: scene.player.body.blocked.down }
-    })
+  expect(out.startedOnDeck).toBe(true)
+  expect(out.endedOnDeck).toBe(true)
+  // He came down on the plank he left. It used to be a hundred pixels back.
+  expect(Math.abs(out.after - out.before)).toBeLessThan(2)
 
-  const before = await gap()
-  expect(before.onDeck).toBe(true)
+  expect(consoleErrors).toEqual([])
+})
 
-  // Three full jumps, straight up, with nothing else pressed.
-  for (let i = 0; i < 3; i += 1) {
-    await page.keyboard.down('Space')
-    await page.waitForTimeout(80)
-    await page.keyboard.up('Space')
-    await page.waitForTimeout(900)
-  }
+/**
+ * A jump is his own, not the ferry's.
+ *
+ * Keeping the ride through a jump fixed the sliding, and bought a stranger
+ * problem: he was following the ferry while airborne, so a ferry reaching the
+ * end of its trip mid-jump swept him back the other way in mid-air. Nothing a
+ * jump does should be able to reverse it.
+ *
+ * He takes the speed the deck had at the moment he left it and keeps that,
+ * which is what being thrown from a moving thing does.
+ */
+test('a ferry turning round mid-jump does not turn him round with it', async ({ page }) => {
+  const consoleErrors = watchForErrors(page)
 
-  const after = await gap()
-  expect(after.onDeck).toBe(true)
-  expect(Math.abs(after.gap - before.gap)).toBeLessThan(2)
+  await page.goto('/')
+  await waitForGameScene(page)
+  await goToLevel(page, 2)
+
+  const out = await page.evaluate(async () => {
+    const scene = window.__GAME__?.scene.getScene('Game') as unknown as GameProbe
+    const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
+    const ferry = scene.movingPlatforms[0] as GameProbe['movingPlatforms'][0]
+
+    scene.player.setVelocity(0, 0)
+    scene.player.setPosition(ferry.sprite.x, ferry.sprite.y - 40)
+    for (let i = 0; i < 30; i += 1) await nextFrame()
+
+    // Wait until the ferry is nearly at the far end AND still heading for it,
+    // so it must turn round while he is off the deck. Checking the direction
+    // matters: "nearly at the far end" is also true on the way back, and
+    // starting there would watch a jump with no turnaround in it at all.
+    let previous = ferry.sprite.x
+    for (let i = 0; i < 1200; i += 1) {
+      await nextFrame()
+      const now = ferry.sprite.x
+      const headingForTheFarEnd = now > previous
+      previous = now
+      if (headingForTheFarEnd && now >= 730) break
+    }
+
+    scene.player.setVelocity(0, -520)
+
+    const playerSteps: number[] = []
+    const ferrySteps: number[] = []
+    let lastPlayer = scene.player.x
+    let lastFerry = ferry.sprite.x
+    for (let i = 0; i < 45; i += 1) {
+      await nextFrame()
+      playerSteps.push(scene.player.x - lastPlayer)
+      ferrySteps.push(ferry.sprite.x - lastFerry)
+      lastPlayer = scene.player.x
+      lastFerry = ferry.sprite.x
+    }
+
+    const wentBothWays = (steps: number[]) =>
+      steps.some((step) => step > 0.1) && steps.some((step) => step < -0.1)
+
+    return { ferryReversed: wentBothWays(ferrySteps), playerReversed: wentBothWays(playerSteps) }
+  })
+
+  // The ferry really did turn round while he was in the air...
+  expect(out.ferryReversed).toBe(true)
+  // ...and he carried straight on.
+  expect(out.playerReversed).toBe(false)
+
+  expect(consoleErrors).toEqual([])
+})
+
+/**
+ * Riding is not a series of landings.
+ *
+ * A platform moving under his feet makes the collision flags flicker — he sinks
+ * a fraction into the deck, gets pushed out, and the little bounce reads as
+ * leaving the floor and arriving again. Every one of those squashes him, and
+ * riding a lift looked like a fault in the game: "it looks like I am
+ * continually landing and getting squished".
+ *
+ * He is dropped on from a height so he arrives with a real thump and a real
+ * bounce, which is how a player gets on it, and then left alone for two full
+ * trips.
+ */
+test('riding a lift does not squash him over and over', async ({ page }) => {
+  const consoleErrors = watchForErrors(page)
+
+  await page.goto('/')
+  await waitForGameScene(page)
+  await goToLevel(page, 2)
+
+  const landings = await page.evaluate(async () => {
+    const scene = window.__GAME__?.scene.getScene('Game') as unknown as GameProbe
+    const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
+    const lift = scene.movingPlatforms[1] as GameProbe['movingPlatforms'][1]
+
+    scene.player.setVelocity(0, 0)
+    scene.player.setPosition(lift.sprite.x, lift.sprite.y - 120)
+    for (let i = 0; i < 40; i += 1) await nextFrame()
+
+    // Every touchdown restarts the squash, so counting those counts them.
+    let count = 0
+    let lastSquash = scene.squashStartedAt
+    for (let i = 0; i < 900; i += 1) {
+      await nextFrame()
+      if (scene.squashStartedAt !== lastSquash) {
+        count += 1
+        lastSquash = scene.squashStartedAt
+      }
+    }
+    return count
+  })
+
+  // Not one, in two whole trips up and down.
+  expect(landings).toBeLessThan(2)
 
   expect(consoleErrors).toEqual([])
 })

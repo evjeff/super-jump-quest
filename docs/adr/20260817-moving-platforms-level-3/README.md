@@ -59,10 +59,19 @@ Standing on a sliding ledge has to *carry* you. That is the whole feature; a
 platform that slides out from under your feet is a bug with a nice colour.
 
 **Whichever moving platform he last stood on is his "ride", and it stays his
-ride until he lands on something else.** Every frame, the platform is moved to
-where the clock says it should be, and if it is his ride he is moved by exactly
-the same step. Not given its speed — moved by its step, off the same clock, so
-there is no arithmetic for the two of them to disagree about.
+ride until he lands on something else.** It works differently depending on
+whether his feet are down:
+
+- **Feet on the deck**: the platform is moved to where the clock says it should
+  be, and he is moved by exactly the same step. Not given its speed — moved by
+  its step, off the same clock, so there is no arithmetic for the two of them to
+  disagree about.
+- **In the air above it**: he keeps the speed the deck had *at the moment he
+  left*, and stops caring what it does next. Following it live is the obvious
+  thing and it is wrong: a ferry reaching the end of its trip mid-jump would
+  sweep him back the other way in mid-air. Nothing a jump does should be able to
+  reverse it. Taking the speed you left with is what being thrown from a moving
+  thing does, and it still lands him on the plank he took off from.
 
 The obvious alternative is to let Phaser do it, and Phaser will: once the player
 has been separated onto the top of an immovable body, `ProcessY.js` runs
@@ -100,7 +109,27 @@ Three things fall out of that, all of them load-bearing:
   on — the exact drift this is all here to prevent, reintroduced by the fix for
   it. It took a frame-by-frame trace to see.
 
-Sideways only. Up and down is left to ordinary collision separation: a rising
+### Standing on a moving deck counts as standing, whatever the collision says
+
+A platform moving under his feet makes Arcade's contact flags flicker: he sinks
+a fraction into the deck, gets pushed back out, and the little bounce that
+follows reads as leaving the floor and arriving on it again. Every one of those
+"arrivals" restarts the landing squash, so riding a lift squashed him over and
+over — *"it looks like I am continually landing and getting squished."*
+
+So "is he on the ground" now also accepts "his feet are on a deck he is riding",
+which is a question about where he **is** rather than about what the collision
+**did** this frame. It allows a few pixels of slack, and a bounce off a deck is
+about one, so it holds steady where the flags do not.
+
+The landing *sound* never had this problem: it has always been debounced by
+`sound.landingCooldownMs`. The squash deliberately was not, because bouncing
+down a staircase should squash on every bounce. That is still true — what
+changed is that resting on a moving floor is no longer mistaken for bouncing.
+
+### Sideways only, up and down is the collision's
+
+Up and down is left to ordinary collision separation: a rising
 platform pushes the resting player up, and on a falling one gravity keeps him in
 contact. That was a guess about somebody else's engine, so it was measured
 rather than trusted — over a four-second ride including the turnaround at the
@@ -156,6 +185,10 @@ too, but it is the same idea written by hand and unwired from the riding maths.
   as he is in the air, including a jump *off* it onto solid ground. That reads
   as inertia and feels right, but it is a decision, not physics: he does not
   keep it after landing.
+- Because a jump keeps the speed he left with rather than following the deck, a
+  jump that straddles a turnaround puts him down further along the deck than he
+  took off from. That is the correct answer and the one that feels right, but it
+  does mean "you always land on the same plank" is only true within one trip.
 - `frictionX: 0` is invisible and essential. Someone tidying it away, or adding
   a second carry "to be safe", gets double speed off the front of the ferry.
 - The lift test measures how much of the ride he spends in contact with the
