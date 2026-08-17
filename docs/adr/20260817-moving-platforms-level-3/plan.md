@@ -89,41 +89,35 @@ supported mode for exactly this: it derives the body's velocity from the
 distance moved since the last frame, so collision separation still behaves as if
 the platform were moving under its own steam.
 
-**Riding is Phaser's job, not ours — checked, not assumed.** Arcade already
-carries a rider on a horizontally moving immovable body. In `ProcessY`, once the
-player has been separated onto the platform's top, it runs:
+**We carry the rider, and we keep carrying him in mid-air.** `updateRide` picks
+out whichever moving platform he is standing on and remembers it; `movePlatforms`
+moves that platform to where the clock says, and moves him by the same step.
 
-```js
-body1.x += body1Distance * body1.friction.x   // node_modules/phaser/src/physics/arcade/ProcessY.js
-```
+> This section is the one the playtest rewrote. The original plan handed the
+> carry to Phaser — Arcade does it for free in `ProcessY`, via
+> `body1.x += distance * friction.x`, and it is exact. It is also only true
+> while his feet are down, and a jump is nearly a second of not-down. Three
+> paragraphs of reasoning could not see that; thirty seconds of playing could.
+> The ADR has the full story.
 
-— and the same code path uses `autoFrame` rather than `prev` when
-`directControl` is on, which is the other reason to use it. Up-and-down is
-handled by ordinary separation: a rising platform pushes the resting player up,
-and on a falling one gravity keeps him in contact.
+Three details are load-bearing, and all three have been a bug at some point:
 
-**But `frictionX: 1` has to be asked for.** A Body's own default is `1`, so
-`Body.js` reads as though riding works out of the box. These platforms come from
-a physics **group**, and `PhysicsGroup.js` defaults `frictionX` to `0` and
-stamps it onto every body it makes. Miss it and the ferry slides out from under
-his feet while he stands in mid-air, with every other part of the physics
-correct.
+- **`frictionX: 0` on the group**, to switch Phaser's own carry off. Both
+  defaults have bitten here: a `Body` defaults `friction.x` to `1`, a
+  `PhysicsGroup` to `0`.
+- **Move him by the platform's step, not by its speed.** The speed version is
+  integrated by the physics accumulator while the platform runs off the level
+  clock, and on a loaded machine they disagree — seven pixels in three jumps,
+  with nothing correcting it. The step version cannot drift; it is the same
+  number.
+- **End the ride on `blocked.down`, never `touching.down`.** `touching` comes
+  back true for stray frames mid-fall.
 
-This is worth stating plainly because the obvious hand-written version — adding
-the platform's speed to the player's own each frame — would **double** the
-carry: the player would slide across the ferry at twice its speed and fall off
-the front. The first version of this plan had exactly that bug in it, and
-reading `ProcessY.js` is what caught it.
+Sideways only. Up and down is ordinary collision separation: a rising platform
+pushes the resting player up, and on a falling one gravity keeps him in contact.
 
-Because Phaser owns the carry, there is no "is he standing on it" rule for us to
-write, no ordering question between the scene's update and the physics step, and
-`handleMovement` in `GameScene` is not touched at all.
-
-**Task 6 proves this in a browser before the level is designed around it.** It
-is a claim about somebody else's engine, read off its source; a running game is
-the only thing that settles it. If riding turns out not to work, the fallback is
-the manual carry above — applied *instead of* Phaser's, by setting
-`friction.x = 0` on the platform bodies, never alongside it.
+**Task 6 proves this in a browser before the level is designed around it.** A
+running game is the only thing that settles claims about feel.
 
 ## Tuning and colour
 
@@ -193,5 +187,10 @@ apart. Coins do not move, so a level of moving platforms does not disturb it.
   (`(target − current) / dt`). Works, and was this plan's first answer, but
   `directControl` is the same idea supported by the engine, with the riding
   maths already wired to it.
-- **Carrying the rider by hand.** Rejected as wrong, not merely unnecessary —
-  Phaser is already doing it, so doing it again doubles it.
+- **Letting Phaser carry the rider.** This plan's original answer, and it is
+  exact — but only while his feet are on the deck, so every jump cost him a
+  hundred pixels of it. Replaced after the first playtest. Doing both at once is
+  a real bug, not a belt and braces: double speed, off the front.
+- **Handing the rider the platform's velocity** instead of moving him by its
+  step. Simpler to read, and wrong on a busy machine — the two are integrated by
+  different clocks.

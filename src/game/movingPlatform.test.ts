@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { platformPosition } from './movingPlatform'
+import { isStandingOn, platformPosition } from './movingPlatform'
 
 /** A ferry that slides 300 to the right and back, three seconds each way. */
 const FERRY = { x: 100, y: 400, moves: { moveX: 300, seconds: 3 } }
@@ -96,5 +96,40 @@ describe('platformPosition', () => {
     // so every platform sits at home and the level goes still.
     expect(platformPosition(FERRY, 0)).toEqual({ x: 100, y: 400 })
     expect(platformPosition(LIFT, 0)).toEqual({ x: 700, y: 450 })
+  })
+})
+
+describe('isStandingOn', () => {
+  /** A deck from x 100 to 300, with its surface at y 400. */
+  const DECK = { left: 100, right: 300, top: 400, bottom: 424 }
+  /** Someone stood in the middle of it. */
+  const STANDING = { left: 184, right: 216, top: 352, bottom: 400 }
+
+  it('says yes to someone stood on it', () => {
+    expect(isStandingOn(STANDING, DECK)).toBe(true)
+  })
+
+  it('says yes when he is a pixel or two into it, or a pixel or two above', () => {
+    expect(isStandingOn({ ...STANDING, bottom: 402 }, DECK)).toBe(true)
+    expect(isStandingOn({ ...STANDING, bottom: 398 }, DECK)).toBe(true)
+  })
+
+  it('says no to someone jumping well above it', () => {
+    expect(isStandingOn({ ...STANDING, bottom: 340 }, DECK)).toBe(false)
+  })
+
+  it('says no to someone below it', () => {
+    expect(isStandingOn({ ...STANDING, bottom: 500 }, DECK)).toBe(false)
+  })
+
+  it('says no to someone at the right height but off to one side', () => {
+    expect(isStandingOn({ ...STANDING, left: 20, right: 52 }, DECK)).toBe(false)
+    expect(isStandingOn({ ...STANDING, left: 400, right: 432 }, DECK)).toBe(false)
+  })
+
+  it('says yes to someone with only his toes on the end', () => {
+    expect(isStandingOn({ ...STANDING, left: 298, right: 330 }, DECK)).toBe(true)
+    // ...and no once he is past the end entirely.
+    expect(isStandingOn({ ...STANDING, left: 300, right: 332 }, DECK)).toBe(false)
   })
 })

@@ -377,10 +377,67 @@ test('a sliding platform carries a player standing on it, at its speed', async (
   // The ferry went somewhere, so there was something to be carried by.
   expect(Math.abs(ride.platformTravel)).toBeGreaterThan(20)
   // He went exactly as far. Twice as far would mean he is being carried once
-  // by Arcade and once by us, and he would slide off the front of the ferry.
+  // by us and once by Arcade's own `friction.x`, which is why that is set to 0
+  // — and he would slide off the front of the ferry.
   expect(ride.playerTravel / ride.platformTravel).toBeCloseTo(1, 1)
-  // He keeps his place on the deck: whatever gap he landed with, he still has.
-  expect(Math.abs(ride.gapAtEnd - ride.gapAtStart)).toBeLessThan(3)
+  // He keeps his place on the deck exactly — he is moved by the platform's own
+  // step, off the same clock, so there is no rounding to accumulate.
+  expect(Math.abs(ride.gapAtEnd - ride.gapAtStart)).toBeLessThan(1)
+
+  expect(consoleErrors).toEqual([])
+})
+
+/**
+ * He keeps his place on the deck, even in mid-air.
+ *
+ * This is the one that came from playing the game rather than from reasoning
+ * about it: the ride felt wrong, because jumping aboard a ferry left him a
+ * little further back every time and two or three jumps walked him off the end.
+ * Arcade's own carry is exact while his feet are down and does nothing at all
+ * while they are not, and a jump is nearly a second of "not".
+ *
+ * So the ride now survives a jump, and this is what says so. The number it
+ * allows is tiny on purpose: three full jumps used to cost him a third of the
+ * deck, and are expected to cost him nothing at all.
+ */
+test('jumping aboard a moving platform leaves him on the same plank', async ({ page }) => {
+  const consoleErrors = watchForErrors(page)
+
+  await page.goto('/')
+  await waitForGameScene(page)
+  await goToLevel(page, 2)
+
+  // Stand him on the ferry and let him settle.
+  await page.evaluate(async () => {
+    const scene = window.__GAME__?.scene.getScene('Game') as unknown as GameProbe
+    const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
+    const ferry = scene.movingPlatforms[0] as GameProbe['movingPlatforms'][0]
+    scene.player.setVelocity(0, 0)
+    scene.player.setPosition(ferry.sprite.x, ferry.sprite.y - 40)
+    for (let i = 0; i < 40; i += 1) await nextFrame()
+  })
+
+  const gap = () =>
+    page.evaluate(() => {
+      const scene = window.__GAME__?.scene.getScene('Game') as unknown as GameProbe
+      const ferry = scene.movingPlatforms[0] as GameProbe['movingPlatforms'][0]
+      return { gap: scene.player.x - ferry.sprite.x, onDeck: scene.player.body.blocked.down }
+    })
+
+  const before = await gap()
+  expect(before.onDeck).toBe(true)
+
+  // Three full jumps, straight up, with nothing else pressed.
+  for (let i = 0; i < 3; i += 1) {
+    await page.keyboard.down('Space')
+    await page.waitForTimeout(80)
+    await page.keyboard.up('Space')
+    await page.waitForTimeout(900)
+  }
+
+  const after = await gap()
+  expect(after.onDeck).toBe(true)
+  expect(Math.abs(after.gap - before.gap)).toBeLessThan(2)
 
   expect(consoleErrors).toEqual([])
 })

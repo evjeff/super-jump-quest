@@ -50,6 +50,23 @@ export interface Point {
   y: number
 }
 
+/** The four edges of something square, the way the physics engine sees it. */
+export interface Bounds {
+  left: number
+  right: number
+  top: number
+  bottom: number
+}
+
+/**
+ * How close his feet have to be to the deck to count as standing on it.
+ *
+ * A few pixels of slack, because he is never resting on it exactly: gravity
+ * pulls him a fraction into it every frame and the collision pushes him back
+ * out, so his feet hover either side of the surface all the time.
+ */
+const FOOT_SLACK = 4
+
 /**
  * Where this platform is, `elapsedMs` milliseconds into the level.
  *
@@ -76,4 +93,19 @@ export function platformPosition(platform: Movable, elapsedMs: number): Point {
   const travelled = phase <= 1 ? phase : 2 - phase
 
   return { x: home.x + moveX * travelled, y: home.y + moveY * travelled }
+}
+
+/**
+ * Is he standing on this platform?
+ *
+ * Two questions at once: are his feet at the height of the deck, and is any
+ * part of him over it. Toes on the very end still counts — if he can stand
+ * there, he can ride there.
+ */
+export function isStandingOn(player: Bounds, platform: Bounds): boolean {
+  const feetAtDeckHeight =
+    player.bottom >= platform.top - FOOT_SLACK && player.bottom <= platform.top + FOOT_SLACK
+  const somePartOverIt = player.right > platform.left && player.left < platform.right
+
+  return feetAtDeckHeight && somePartOverIt
 }

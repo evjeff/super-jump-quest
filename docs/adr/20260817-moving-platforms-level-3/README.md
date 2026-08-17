@@ -1,4 +1,4 @@
-# Platforms move by clock time, and Phaser carries the rider
+# Platforms move by clock time, and take their passenger with them
 
 - **Date:** 2026-08-17
 - **Status:** Accepted
@@ -53,42 +53,60 @@ level clock stops when the finish banner goes up, so the platforms stop with it.
 And the clock counts the game's own frames, so a tab left in the background does
 not come back with the ferries somewhere unrecognisable.
 
-### The engine carries the rider — we don't
+### We carry the rider, and we keep carrying him in mid-air
 
 Standing on a sliding ledge has to *carry* you. That is the whole feature; a
 platform that slides out from under your feet is a bug with a nice colour.
 
-Phaser's Arcade physics already does it. Once the player has been separated onto
-the top of an immovable body, `ProcessY.js` runs `body.x += distance *
-friction.x`. So the carry costs nothing, as long as moving platforms are
-`immovable` bodies, the player collides with them normally — and their friction
-is not zero.
+**Whichever moving platform he last stood on is his "ride", and it stays his
+ride until he lands on something else.** Every frame, the platform is moved to
+where the clock says it should be, and if it is his ride he is moved by exactly
+the same step. Not given its speed — moved by its step, off the same clock, so
+there is no arithmetic for the two of them to disagree about.
 
-That last clause is the trap, and it cost the first attempt at this. A Body's
-own default `friction.x` is `1`, so reading `Body.js` says riding works out of
-the box. But these platforms are made by a **physics group**, and
-`PhysicsGroup.js` reads `frictionX` out of the group config with a default of
-`0` and stamps it onto every body it creates. The platform slid; the player
-stood in mid-air exactly where he got on. Nothing in the physics looked wrong —
-the velocity, the direction, the collision were all correct — because the bug
-was one silently-defaulted number. So `frictionX: 1` is passed explicitly, with
-a comment saying it is load-bearing.
+The obvious alternative is to let Phaser do it, and Phaser will: once the player
+has been separated onto the top of an immovable body, `ProcessY.js` runs
+`body.x += distance * friction.x`. That was the first build, and it is exact —
+measured at 44.38088888888865 pixels to the ferry's 44.38088888888870. It is
+also, on its own, **the wrong feel**, which is a thing no amount of reading
+finds and one minute of playing does.
 
-The other half of this is worth saying out loud too, because the hand-written
-alternative is very tempting and **wrong**: adding the platform's speed to the
-player's own velocity each frame, which is what the first draft of this plan
-called for, gives the player the carry *twice*. He crosses the ferry at double
-its speed and drops off the front. That one was caught by reading
-`ProcessY.js` before writing the code rather than by playing the game — the
-cheaper of the two ways to find it. Anyone tempted to add a carry later must set
-`friction.x = 0` on the platform bodies in the same change, or hit it.
+The engine's carry only applies while his feet are down. A jump is nearly a
+second of feet-not-down, and at a ferry's 123 pixels a second that is a hundred
+pixels of deck — most of it. Jump twice on a ferry and you walk off the back of
+it without ever pressing a direction. The person this game is built for said it
+in one sentence: *"my character slides to one of the ends of the platform."*
 
-Up and down is left to ordinary collision separation: a rising platform pushes
-the resting player up, and on a falling one gravity keeps him in contact. That
-was a guess about somebody else's engine, so it was measured rather than
-trusted. Over a four-second ride that includes the turnaround at the top, the
-player travels 217.4 pixels to the platform's 216.3, drifts at most 4.5 pixels
-from the deck, and lands exactly once.
+So the ride survives a jump, which is what makes jumping straight up on a ferry
+put you back down on the plank you left.
+
+Three things fall out of that, all of them load-bearing:
+
+- **`frictionX: 0` on the platform group.** The engine's carry has to be turned
+  off, or he gets carried twice — at double the ferry's speed, off the front. It
+  is not off by default in the way you would guess: a `Body` defaults
+  `friction.x` to `1`, while `PhysicsGroup.js` defaults it to `0`. So both
+  values have been the source of a bug here, in opposite directions.
+- **Move him by the step, not by the speed.** Giving him the platform's velocity
+  and letting the physics integrate it looks equivalent and is not: the platform
+  moves off the level clock while the player moves off the physics accumulator,
+  and on a busy machine those disagree. That version drifted seven pixels in
+  three jumps, with nothing to pull the error back. Moving him by the platform's
+  own step cannot drift, because it is the same number.
+- **The ride ends on `blocked.down`, never on `touching.down`.** `touching` means
+  "something brushed me" and comes back true for the odd frame in the middle of a
+  fall with nothing near him. One of those ended the ride 37 pixels above the
+  deck, and by the time his feet found it again the ferry was ten pixels further
+  on — the exact drift this is all here to prevent, reintroduced by the fix for
+  it. It took a frame-by-frame trace to see.
+
+Sideways only. Up and down is left to ordinary collision separation: a rising
+platform pushes the resting player up, and on a falling one gravity keeps him in
+contact. That was a guess about somebody else's engine, so it was measured
+rather than trusted — over a four-second ride including the turnaround at the
+top, the player travels 217.4 pixels to the platform's 216.3, drifts at most 4.5
+pixels from the deck, and lands exactly once. Doing it here as well would lift
+him twice.
 
 ### Position is handed to Phaser through `directControl`, not by teleporting
 
@@ -111,9 +129,10 @@ too, but it is the same idea written by hand and unwired from the riding maths.
 
 - The whole rule is one pure function of time, unit tested without a browser,
   and level 3 plays identically on a phone, a laptop, and a slow tab.
-- The riding is the engine's, so there is no "is he standing on it" test of our
-  own to get wrong, no ordering question between the scene's update and the
-  physics step, and `handleMovement` in `GameScene` is untouched.
+- His place on the deck is exact and stays exact — standing, walking, jumping,
+  and across a turnaround — because it comes from the same clock the platform
+  does rather than from anything that can round differently.
+- Jumping on a ferry does what a person expects it to do.
 - `moves` is optional on a platform, so levels 1 and 2 are unchanged — not
   "changed but equivalent", literally the same files.
 - A level file still reads like a map: one list of platforms, some of which have
@@ -129,10 +148,16 @@ too, but it is the same idea written by hand and unwired from the riding maths.
   real cost; it is paid because one is a design decision and the other is a
   Saturday-morning decision, and a kid should not have to open a level file to
   make the game easier.
-- The carry depends on behaviour inside Phaser's Arcade separation, switched on
-  by a group-config number that defaults to off. A Phaser upgrade could change
-  either. The browser tests are there precisely so that shows up as a red test
-  rather than as an unplayable level.
+- He is moved by setting his position rather than by the physics, which skips
+  collision for that step. Nothing in level 3 puts a wall where a ferry could
+  press him into it, and Arcade sorts out any overlap on the next frame — but a
+  level that ran a ferry along a wall would want checking.
+- Keeping the ride through a jump means he holds the ferry's motion for as long
+  as he is in the air, including a jump *off* it onto solid ground. That reads
+  as inertia and feels right, but it is a decision, not physics: he does not
+  keep it after landing.
+- `frictionX: 0` is invisible and essential. Someone tidying it away, or adding
+  a second carry "to be safe", gets double speed off the front of the ferry.
 - The lift test measures how much of the ride he spends in contact with the
   deck, not how many times he lands. Landings were the obvious measure and are
   the wrong one — a machine busy enough to drop a frame gives him one long fall,
@@ -154,5 +179,6 @@ too, but it is the same idea written by hand and unwired from the riding maths.
 - Someone wants a platform that falls away when you stand on it. That one is
   genuinely different: it depends on the player, not only on the clock, so the
   "position is a pure function of time" decision above is the thing it breaks.
-- Phaser's riding behaviour changes under an upgrade. The fallback is to carry
-  the rider ourselves *and* set `friction.x = 0` in the same breath.
+- A platform ever needs to carry him vertically the way it carries him
+  sideways — a lift you can jump on the spot on. Today the collision does the
+  vertical, and jumping off a rising lift lets it leave without you.
