@@ -110,7 +110,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.cameras.main.setBackgroundColor(TUNING.colors.sky)
+    // The night sky, drawn once in BootScene and dropped in behind everything.
+    // Negative depth is what keeps it behind: platforms, coins, Pip and the
+    // HUD are all at 0 and are drawn in the order they're added.
+    this.add.image(0, 0, 'sky').setOrigin(0, 0).setDepth(-10)
 
     // Wipe the last level's state FIRST, so everything below is built from a
     // clean slate. (The HUD in particular is drawn straight from the score, and

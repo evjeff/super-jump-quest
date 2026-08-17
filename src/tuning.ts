@@ -141,8 +141,12 @@ export const TUNING = {
 
   /** Colors are hex numbers: 0xRRGGBB. Pick new ones at https://htmlcolorcodes.com */
   colors: {
+    /**
+     * What's behind everything. The night sky picture covers all of it, so you
+     * only ever see this in the instant before the game draws its first frame.
+     */
     sky: 0x1e2749,
-    player: 0xffd166,
+
     platform: 0x3d5a80,
 
     /**
@@ -157,5 +161,84 @@ export const TUNING = {
 
     /** The on-screen buttons on a phone. See `touch.opacity` for how faint they are. */
     touchButton: 0xe8e8f0,
+
+    /**
+     * PIP — the boy you play as.
+     *
+     * He's built out of little coloured squares. WHICH square is which colour
+     * is the letter grid in `src/game/pipSprite.ts`; what those colours ARE is
+     * right here. Change one number, save, and he changes in front of you.
+     *
+     * Give him a green cap. Give him purple dungarees. Nothing can break.
+     */
+    pip: {
+      /** His cap. */
+      cap: 0xe0525a,
+
+      /** The peak of the cap, sticking out over his eyes. A bit darker looks best. */
+      capBrim: 0xb03a45,
+
+      /** His face and hands. */
+      skin: 0xf6c99f,
+
+      /** The two rosy patches on his cheeks. */
+      blush: 0xf09a9a,
+
+      /** His eyes. */
+      eye: 0x26243a,
+
+      /** The twinkle in each eye, and his teeth. Usually white. */
+      highlight: 0xffffff,
+
+      /** The inside of his big open smile. */
+      mouth: 0x7a2f38,
+
+      /** The shirt under the dungarees, and his sleeves. */
+      shirt: 0xffd166,
+
+      /** The dungarees themselves. */
+      overalls: 0x3f6fb5,
+
+      /** The legs of the dungarees. A bit darker than the top looks best. */
+      trousers: 0x2d5089,
+
+      /** His boots. */
+      shoes: 0x33304a,
+    },
+
+    /**
+     * THE NIGHT SKY he runs around in, listed from the top of the screen down.
+     *
+     * The whole picture is drawn once when the game starts and then never
+     * again, so adding more to it doesn't slow the game down.
+     */
+    night: {
+      /** Straight up overhead, the darkest part. */
+      top: 0x080c26,
+
+      /** Halfway down. */
+      middle: 0x1e2749,
+
+      /** Down at the horizon, where the sky is always lightest. */
+      horizon: 0x3a4884,
+
+      /** The stars. */
+      star: 0xeef2ff,
+
+      /** The moon. */
+      moon: 0xf6edd4,
+
+      /** The craters on the moon. */
+      crater: 0xe3d6ba,
+
+      /** The furthest hills, right on the horizon. */
+      hillFar: 0x26305f,
+
+      /** The middle row of hills. */
+      hillMid: 0x1a2245,
+
+      /** The nearest hills. Darkest, because they're closest. */
+      hillNear: 0x111730,
+    },
   },
 } as const

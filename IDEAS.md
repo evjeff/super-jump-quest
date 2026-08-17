@@ -45,6 +45,15 @@ _(nothing yet — pick something from below)_
   one last ferry slides along the roof of the level to the very last coin.
   If it's too fast, `platforms.movingSpeed` in `src/tuning.ts` slows every one of
   them down at once (`0.5` is half speed, `0` stops them dead)
+- **Real artwork.** He isn't a yellow rectangle any more — he's **Pip**, a boy
+  in a red cap and blue dungarees with a big open grin, and he turns to face
+  whichever way he's running. Behind him the flat blue sky has become a proper
+  night: dark overhead and lighter down at the horizon, a hundred-odd stars, a
+  moon with craters and a soft halo, and three rows of hills getting darker as
+  they come closer. Every colour of him and of the sky is a number you can
+  change in `src/tuning.ts` — give him a green cap, make the moon pink — and
+  his actual SHAPE is a little grid of letters in `src/game/pipSprite.ts` that
+  you can redraw square by square
 - A clock in the corner, counting the seconds on the level you're playing — it
   stops the moment you grab the last coin, and the game remembers your fastest
   finish on each level even after you close the tab, so there's always a time
@@ -56,18 +65,21 @@ _Good starting points — each is small enough to finish in one sitting._
 
 - [ ] A mute key, so the game can be played at bedtime
       (for now: set `sound.volume` to `0` in `src/tuning.ts`)
+- [ ] Stars that twinkle. The sky is one still picture at the moment, so the
+      stars just sit there
 
 ## 🌟 Someday / bigger
 
 - [ ] Enemies that walk back and forth
 - [ ] A double-jump that leaves sparkles
-- [ ] Real drawn artwork instead of colored shapes
+- [ ] Pip WALKS instead of sliding — legs that actually move when he runs
 - [ ] Background music
 - [ ] A boss at the end
 - [ ] Power-ups (super speed, super jump, shield)
 
 ## ❓ Questions to figure out
 
-- What's the main character's name?
+- What's the main character's name? (the code calls him **Pip** for now — that
+  was a placeholder, not a decision. Say a better one and he's renamed)
 - What is he collecting the coins *for*?
 - Who's the bad guy?
