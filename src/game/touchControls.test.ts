@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { TouchButton, TouchControlId } from './touchControls'
-import { isOnButton, justPressed, pressedButtons, touchButtonLayout } from './touchControls'
+import {
+  isOnButton,
+  justPressed,
+  newFingerLanded,
+  pressedButtons,
+  touchButtonLayout,
+} from './touchControls'
 
 const OPTIONS = {
   width: 960,
@@ -9,6 +15,7 @@ const OPTIONS = {
   jumpRadius: 60,
   restartRadius: 22,
   margin: 24,
+  directionGap: 12,
 }
 
 const LAYOUT = touchButtonLayout(OPTIONS)
@@ -175,5 +182,32 @@ describe('justPressed', () => {
 
   it('does not confuse one button for another', () => {
     expect(justPressed(none, new Set(['left']), 'jump')).toBe(false)
+  })
+})
+
+describe('newFingerLanded', () => {
+  it('is a tap when the first finger lands', () => {
+    expect(newFingerLanded(0, 1)).toBe(true)
+  })
+
+  it('is not a tap when a finger stays put', () => {
+    // Winning happens mid-jump, so a thumb is still on ▲ when the banner goes
+    // up. That finger must not skip the banner nobody has read yet.
+    expect(newFingerLanded(1, 1)).toBe(false)
+  })
+
+  it('is not a tap when a finger comes up', () => {
+    expect(newFingerLanded(1, 0)).toBe(false)
+    expect(newFingerLanded(2, 1)).toBe(false)
+  })
+
+  it('is a tap even while another thumb is resting on the screen', () => {
+    // The left thumb is usually still parked where ◀ was. Asking "is the screen
+    // being touched" would answer yes the whole time and swallow this tap.
+    expect(newFingerLanded(1, 2)).toBe(true)
+  })
+
+  it('is a tap when a hand lands with more than one finger at once', () => {
+    expect(newFingerLanded(0, 2)).toBe(true)
   })
 })

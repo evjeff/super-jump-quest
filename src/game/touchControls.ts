@@ -43,10 +43,9 @@ export interface TouchLayoutOptions {
   restartRadius: number
   /** How far the buttons sit in from the edge of the screen. */
   margin: number
+  /** Breathing room between ◀ and ▶ so a thumb can't press both at once. */
+  directionGap: number
 }
-
-/** Breathing room between ◀ and ▶ so a thumb can't press both at once. */
-const DIRECTION_GAP = 12
 
 /**
  * Work out where every button goes for a screen this size.
@@ -58,14 +57,14 @@ const DIRECTION_GAP = 12
  * corner was taken anyway.
  */
 export function touchButtonLayout(options: TouchLayoutOptions): TouchButton[] {
-  const { width, height, radius, jumpRadius, restartRadius, margin } = options
+  const { width, height, radius, jumpRadius, restartRadius, margin, directionGap } = options
 
   const thumbRow = height - margin - radius
   const leftX = margin + radius
 
   return [
     { id: 'left', x: leftX, y: thumbRow, radius, label: '◀' },
-    { id: 'right', x: leftX + radius * 2 + DIRECTION_GAP, y: thumbRow, radius, label: '▶' },
+    { id: 'right', x: leftX + radius * 2 + directionGap, y: thumbRow, radius, label: '▶' },
     {
       id: 'jump',
       x: width - margin - jumpRadius,
@@ -131,4 +130,26 @@ export function justPressed(
   id: TouchControlId,
 ): boolean {
   return current.has(id) && !previous.has(id)
+}
+
+/**
+ * Did a NEW finger land on the screen, anywhere?
+ *
+ * This is how "tap to carry on" works on the finish banner, where there is no N
+ * key to press and no button to aim at.
+ *
+ * It compares how MANY fingers are on the glass, rather than asking "is the
+ * screen being touched" — those are different questions the moment a second
+ * hand joins in, and the difference is the whole point:
+ *
+ * - A finger that never left the screen is not a tap. Winning usually happens
+ *   mid-jump, so a thumb is still on ▲ when the banner appears; the count
+ *   doesn't change, so nothing is skipped.
+ * - A tap still counts while another thumb rests. That same left thumb is
+ *   usually parked where ◀ was. "Is the screen being touched" never goes back
+ *   to no, so it would swallow every tap of the other hand and leave the banner
+ *   looking broken with no way on.
+ */
+export function newFingerLanded(previousCount: number, currentCount: number): boolean {
+  return currentCount > previousCount
 }

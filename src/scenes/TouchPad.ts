@@ -1,6 +1,11 @@
 import type Phaser from 'phaser'
 import type { TouchButton, TouchControlId } from '../game/touchControls'
-import { justPressed, pressedButtons, touchButtonLayout } from '../game/touchControls'
+import {
+  justPressed,
+  newFingerLanded,
+  pressedButtons,
+  touchButtonLayout,
+} from '../game/touchControls'
 import { TUNING } from '../tuning'
 
 /**
@@ -29,8 +34,9 @@ export class TouchPad {
 
   private held: Set<TouchControlId> = new Set()
   private heldLastFrame: Set<TouchControlId> = new Set()
-  private screenTouched = false
-  private screenTouchedLastFrame = false
+  /** How many fingers are on the glass — not which, just how many. */
+  private fingerCount = 0
+  private fingerCountLastFrame = 0
 
   constructor(private readonly scene: Phaser.Scene) {
     this.buttons = touchButtonLayout({
@@ -40,6 +46,7 @@ export class TouchPad {
       jumpRadius: TUNING.touch.jumpButtonRadius,
       restartRadius: TUNING.touch.restartButtonRadius,
       margin: TUNING.touch.edgeMargin,
+      directionGap: TUNING.touch.directionGap,
     })
 
     for (const button of this.buttons) {
@@ -48,6 +55,21 @@ export class TouchPad {
       // back to level 1 on a phone. The thumb buttons get out of the way.
       if (button.id !== 'restart') this.thumbControls.push(...drawn)
     }
+
+    // A finger already on the glass right now is NOT a new press.
+    //
+    // This pad is built fresh every time a level starts, and a level usually
+    // starts because a finger pressed something: ↻, or a tap past the finish
+    // banner. That finger is still down when this runs. Starting from "nothing
+    // was pressed" would read it as a brand new press on the very next frame —
+    // and holding ↻ would rebuild the level every frame for as long as a thumb
+    // stayed on it, freezing him at the spawn point.
+    //
+    // So take a reading now and treat it as the past. Whatever is down has to
+    // be let go and pressed again to count.
+    this.read()
+    this.heldLastFrame = this.held
+    this.fingerCountLastFrame = this.fingerCount
   }
 
   /**
@@ -67,8 +89,8 @@ export class TouchPad {
     this.heldLastFrame = this.held
     this.held = pressedButtons(this.buttons, points)
 
-    this.screenTouchedLastFrame = this.screenTouched
-    this.screenTouched = points.length > 0
+    this.fingerCountLastFrame = this.fingerCount
+    this.fingerCount = points.length
   }
 
   /** Is this button being held down right now? For moving left and right. */
@@ -81,15 +103,9 @@ export class TouchPad {
     return justPressed(this.heldLastFrame, this.held, id)
   }
 
-  /**
-   * Did a finger just land anywhere on the screen?
-   *
-   * This is how "tap to carry on" works on the finish banner, where there is no
-   * N key to press. It's the moment a finger ARRIVES, so a finger still resting
-   * on the jump button from the jump that won the level doesn't count.
-   */
+  /** Did a new finger just land anywhere on the screen? For "tap to carry on". */
   wasScreenTapped(): boolean {
-    return this.screenTouched && !this.screenTouchedLastFrame
+    return newFingerLanded(this.fingerCountLastFrame, this.fingerCount)
   }
 
   /** Hide the thumb buttons while the finish banner is up. */
@@ -110,7 +126,10 @@ export class TouchPad {
     const label = this.scene.add.text(button.x, button.y, button.label, {
       fontFamily: 'monospace',
       fontSize: `${Math.round(button.radius * 0.9)}px`,
-      color: TUNING.colors.text,
+      // The same colour as the ring around it, written the way text wants it.
+      // Reading a second colour here would let an arrow drift away from its
+      // own outline the first time somebody recoloured one of them.
+      color: cssColor(color),
     })
     label.setOrigin(0.5).setAlpha(opacity).setScrollFactor(0).setDepth(DEPTH)
 
@@ -118,14 +137,24 @@ export class TouchPad {
   }
 }
 
+/** `0xe8e8f0` the way a text style wants it: `#e8e8f0`. */
+function cssColor(color: number): string {
+  return `#${color.toString(16).padStart(6, '0')}`
+}
+
 /**
  * Should this device get on-screen buttons at all?
  *
  * A coarse pointer means a finger rather than a mouse, which is the question we
- * actually care about. The touch check behind it catches anything that reports
- * a touchscreen but doesn't answer the media query.
+ * actually care about — and it is deliberately the SAME question `index.html`
+ * asks before it hides the keyboard instructions.
+ *
+ * "Does this device support touch at all" would be the wrong question, and it
+ * was asked here first: it is true of any touchscreen laptop, so a player with
+ * a mouse and a keyboard got four buttons painted over the game and a banner
+ * telling them to tap, while the footer underneath still told them to press N.
+ * One question, one answer, both files.
  */
-export function wantsTouchControls(game: Phaser.Game): boolean {
-  const coarsePointer = window.matchMedia?.('(pointer: coarse)').matches ?? false
-  return coarsePointer || game.device.input.touch
+export function wantsTouchControls(): boolean {
+  return window.matchMedia?.('(pointer: coarse)').matches ?? false
 }

@@ -64,9 +64,6 @@
         overflow: hidden;
         box-shadow: 0 12px 40px rgb(0 0 0 / 55%);
       }
-      #game canvas {
-        display: block;
-      }
       footer {
         font-size: 13px;
         opacity: 0.6;
@@ -76,10 +73,21 @@
       /* --- phones and tablets ------------------------------------------- */
 
       /* A coarse pointer means a finger. The game draws its own buttons then,
-         so the keyboard footer is just height stolen from the picture. */
+         so the keyboard footer is just height stolen from the picture.
+
+         `wantsTouchControls` in src/scenes/TouchPad.ts asks this exact same
+         question before it draws those buttons. CSS can't read a TypeScript
+         constant, so the two have to be kept in step by hand — change one and
+         change the other, or the game shows finger buttons under keyboard
+         instructions. */
       @media (pointer: coarse) {
         body {
-          --page-chrome: 0px;
+          /* No footer here, but the notch and the home bar still cost height —
+             and they have to be counted, not just padded around. Padding alone
+             would let the column grow past the screen, and since it is centred
+             it overflows at BOTH ends: the top of the score would slide off,
+             with no way to scroll it back because scrolling is switched off. */
+          --page-chrome: calc(env(safe-area-inset-top) + env(safe-area-inset-bottom));
           /* No cap: on a phone or tablet, filling the screen beats crisp edges. */
           --max-width: 100%;
           gap: 0;
@@ -98,10 +106,24 @@
       }
 
       /* Held upright, a 16:9 game is a letterbox slot with the buttons crammed
-         into it. Ask for a turn instead. The game keeps running underneath —
-         it is covered, not stopped — so turning back is instant. */
+         into it. Ask for a turn instead. `src/main.ts` sends the game to sleep
+         while this card is up — everything stays exactly where it was, so
+         turning back picks up mid-jump. */
       #rotate {
         display: none;
+      }
+      /* Keyframes are global wherever they are written, so this lives out here
+         rather than inside the media query below, where the indentation would
+         promise a scope that doesn't exist. */
+      @keyframes turn-it {
+        0%,
+        25% {
+          transform: rotate(0deg);
+        }
+        55%,
+        100% {
+          transform: rotate(90deg);
+        }
       }
       @media (pointer: coarse) and (orientation: portrait) {
         #rotate {
@@ -131,16 +153,6 @@
           /* It turns, over and over, showing what to do rather than saying it —
              which matters when the person holding it is still learning to read. */
           animation: turn-it 2.6s ease-in-out infinite;
-        }
-        @keyframes turn-it {
-          0%,
-          25% {
-            transform: rotate(0deg);
-          }
-          55%,
-          100% {
-            transform: rotate(90deg);
-          }
         }
         @media (prefers-reduced-motion: reduce) {
           #rotate .phone {

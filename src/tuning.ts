@@ -91,6 +91,11 @@ export const TUNING = {
     edgeMargin: 24,
 
     /**
+     * The gap between ◀ and ▶. Bigger if a thumb keeps catching both at once.
+     */
+    directionGap: 12,
+
+    /**
      * How see-through the buttons are. 0 = invisible, 1 = solid.
      * Low on purpose: you should be able to watch him run right through one.
      */
@@ -99,10 +104,14 @@ export const TUNING = {
     /**
      * How long the finish banner ignores taps for, in milliseconds.
      *
-     * Winning usually means a finger is still on the jump button. Without this
-     * pause, that same finger coming down again — or the tail end of the jump
-     * that grabbed the last coin — would skip straight past the "NEW BEST
-     * TIME!" nobody got to read.
+     * A finger that never leaves the screen is already not a tap — that's
+     * `newFingerLanded` in `src/game/touchControls.ts`, and it needs no help.
+     * What this pause buys is the reflex: you grab the last coin, and your
+     * thumb presses ▲ again a tenth of a second later out of pure habit. That
+     * IS a new finger landing, and without the pause it would wipe away a "NEW
+     * BEST TIME!" nobody got to read.
+     *
+     * Smaller = the banner gets out of your way sooner.
      */
     bannerTapDelayMs: 400,
   },

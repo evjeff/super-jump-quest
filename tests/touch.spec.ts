@@ -1,6 +1,20 @@
 import type { BrowserContext, CDPSession, Page } from '@playwright/test'
 import { expect, test } from '@playwright/test'
 import { TUNING } from '../src/tuning'
+import type { GameProbe } from './probe'
+import {
+  banner,
+  collectCoins,
+  hud,
+  jumpsUsed,
+  levelTimeMs,
+  playerIsGrounded,
+  playerVelocityX,
+  playerX,
+  playerY,
+  waitForGameScene,
+  watchForErrors,
+} from './probe'
 
 /**
  * The black-screen test, for a phone.
@@ -106,12 +120,55 @@ test('the ↻ button starts the game over', async ({ page, context }) => {
   await waitForGameScene(page)
   const fingers = await touchscreen(page, context)
 
-  await collectFirstCoin(page)
+  await collectCoins(page, 1)
   expect(await hud(page)).not.toContain('SCORE 00000')
 
   await fingers.tap(await buttonPoint(page, 'restart'))
   await expect.poll(() => hud(page), { timeout: 5_000 }).toContain('SCORE 00000')
   expect(await hud(page)).toContain('LEVEL 1')
+})
+
+test('leaning on ↻ starts the game over once, not once per frame', async ({ page, context }) => {
+  await page.goto('/')
+  await waitForGameScene(page)
+  const fingers = await touchscreen(page, context)
+
+  await collectCoins(page, 1)
+
+  // Hold it down like a child would — nobody taps a button for one frame.
+  await fingers.down(1, await buttonPoint(page, 'restart'))
+  await page.waitForTimeout(800)
+  await fingers.up(1)
+  await page.waitForTimeout(100)
+
+  expect(await hud(page)).toContain('SCORE 00000')
+
+  // The level started ONCE, near the beginning of that hold. If every frame
+  // rebuilt the level, its clock would have been reset every frame too and
+  // would read close to zero — and he'd have been frozen at the spawn point
+  // for as long as the thumb stayed there.
+  expect(await levelTimeMs(page)).toBeGreaterThan(500)
+})
+
+test('a tap still counts while another thumb rests on the screen', async ({ page, context }) => {
+  await page.goto('/')
+  await waitForGameScene(page)
+  const fingers = await touchscreen(page, context)
+
+  // Finish the level with the left thumb parked where ◀ is — which is where it
+  // has been all level, and where it stays while the banner goes up.
+  await fingers.down(1, await buttonPoint(page, 'left'))
+  await collectCoins(page)
+  expect(await banner(page)).toContain('LEVEL 1 DONE!')
+  await page.waitForTimeout(600)
+
+  // Now the OTHER hand taps. The resting thumb must not swallow it.
+  await fingers.down(2, { x: 400, y: 180 })
+  await page.waitForTimeout(150)
+  await fingers.up(2)
+
+  await expect.poll(() => hud(page), { timeout: 5_000 }).toContain('LEVEL 2')
+  await fingers.up(1)
 })
 
 test('finishing a level asks for a tap, and a tap starts the next one', async ({
@@ -126,7 +183,7 @@ test('finishing a level asks for a tap, and a tap starts the next one', async ({
   // A finger already on the screen when the level ends — which is exactly what
   // winning feels like, since the last coin is usually grabbed mid-jump.
   await fingers.down(1, await buttonPoint(page, 'jump'))
-  await collectEveryCoin(page)
+  await collectCoins(page)
 
   const finished = await banner(page)
   expect(finished).toContain('LEVEL 1 DONE!')
@@ -157,16 +214,32 @@ test('a phone held upright asks to be turned sideways', async ({ page }) => {
 
   const rotate = page.locator('#rotate')
   await expect(rotate).toBeHidden()
+  expect(await gameIsRunning(page)).toBe(true)
 
   // Turn the phone upright. A 16:9 game in a tall window is a letterbox slot.
   await page.setViewportSize({ width: 360, height: 863 })
   await expect(rotate).toBeVisible()
   await expect(rotate).toContainText('Turn your phone sideways')
 
-  // Turning back gets straight on with the game — it was never stopped.
+  // ...and the game stops while it's covered. Nothing shows through that card,
+  // so every frame drawn behind it is a picture nobody sees and battery nobody
+  // gets back — and a phone can lie face up like that all afternoon.
+  await expect.poll(() => gameIsRunning(page), { timeout: 5_000 }).toBe(false)
+
+  // The clock stops with it. Rotating your phone must not cost you a best time.
+  const clockWhileCovered = await levelTimeMs(page)
+  await page.waitForTimeout(600)
+  expect(await levelTimeMs(page)).toBe(clockWhileCovered)
+
+  // Turning back picks up exactly where it left off — asleep, not quit.
   await page.setViewportSize({ width: 863, height: 360 })
   await expect(rotate).toBeHidden()
+  await expect.poll(() => gameIsRunning(page), { timeout: 5_000 }).toBe(true)
   await expect(page.locator('#game canvas')).toBeVisible()
+
+  // Still the same level, still ticking.
+  expect(await hud(page)).toContain('LEVEL 1')
+  await expect.poll(() => levelTimeMs(page)).toBeGreaterThan(clockWhileCovered)
 })
 
 // --- driving a touchscreen -------------------------------------------------
@@ -235,7 +308,7 @@ async function touchscreen(page: Page, context: BrowserContext): Promise<Fingers
 /** Where a button is on the actual phone screen, in browser pixels. */
 async function buttonPoint(page: Page, id: string): Promise<Point> {
   const button = await page.evaluate((wanted) => {
-    const scene = window.__GAME__?.scene.getScene('Game') as unknown as TouchProbe
+    const scene = window.__GAME__?.scene.getScene('Game') as unknown as GameProbe
     return scene.touchPad?.buttons.find((candidate) => candidate.id === wanted) ?? null
   }, id)
   if (!button) throw new Error(`there is no ${id} button on screen`)
@@ -251,128 +324,14 @@ async function buttonPoint(page: Page, id: string): Promise<Point> {
   }
 }
 
+/** Is the game's own loop turning, or has it been sent to sleep? */
+async function gameIsRunning(page: Page): Promise<boolean> {
+  return page.evaluate(() => window.__GAME__?.loop.running ?? false)
+}
+
 async function buttonIds(page: Page): Promise<string[]> {
   return page.evaluate(() => {
-    const scene = window.__GAME__?.scene.getScene('Game') as unknown as TouchProbe
+    const scene = window.__GAME__?.scene.getScene('Game') as unknown as GameProbe
     return (scene.touchPad?.buttons ?? []).map((button) => button.id).sort()
   })
-}
-
-// --- reading the game ------------------------------------------------------
-
-type TouchProbe = {
-  touchPad: { buttons: { id: string; x: number; y: number }[] } | null
-  player: {
-    x: number
-    y: number
-    body: { blocked: { down: boolean }; velocity: { x: number } }
-    setVelocity(x: number, y: number): void
-    setPosition(x: number, y: number): void
-  }
-  coins: { getChildren(): { x: number; y: number; active: boolean }[] }
-  hud: { text: string }
-  banner: { text: string }
-  jumpState: { jumpsUsed: number }
-}
-
-async function waitForGameScene(page: Page): Promise<void> {
-  await expect
-    .poll(
-      () =>
-        page.evaluate(() => {
-          const scene = window.__GAME__?.scene.getScene('Game') as unknown as {
-            hud?: { text?: string }
-          } | null
-          return typeof scene?.hud?.text === 'string'
-        }),
-      { timeout: 15_000 },
-    )
-    .toBe(true)
-}
-
-async function playerX(page: Page): Promise<number> {
-  return page.evaluate(() => {
-    const scene = window.__GAME__?.scene.getScene('Game') as unknown as TouchProbe
-    return scene.player.x
-  })
-}
-
-async function playerY(page: Page): Promise<number> {
-  return page.evaluate(() => {
-    const scene = window.__GAME__?.scene.getScene('Game') as unknown as TouchProbe
-    return scene.player.y
-  })
-}
-
-async function playerVelocityX(page: Page): Promise<number> {
-  return page.evaluate(() => {
-    const scene = window.__GAME__?.scene.getScene('Game') as unknown as TouchProbe
-    return scene.player.body.velocity.x
-  })
-}
-
-async function playerIsGrounded(page: Page): Promise<boolean> {
-  return page.evaluate(() => {
-    const scene = window.__GAME__?.scene.getScene('Game') as unknown as TouchProbe | undefined
-    return scene?.player?.body?.blocked.down ?? false
-  })
-}
-
-async function jumpsUsed(page: Page): Promise<number> {
-  return page.evaluate(() => {
-    const scene = window.__GAME__?.scene.getScene('Game') as unknown as TouchProbe
-    return scene.jumpState.jumpsUsed
-  })
-}
-
-async function hud(page: Page): Promise<string> {
-  return page.evaluate(() => {
-    const scene = window.__GAME__?.scene.getScene('Game') as unknown as TouchProbe
-    return scene.hud.text
-  })
-}
-
-async function banner(page: Page): Promise<string> {
-  return page.evaluate(() => {
-    const scene = window.__GAME__?.scene.getScene('Game') as unknown as TouchProbe
-    return scene.banner.text
-  })
-}
-
-/** Finish a level without playing it: park him on each coin, one frame apart. */
-async function collectEveryCoin(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    const scene = window.__GAME__?.scene.getScene('Game') as unknown as TouchProbe
-    const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
-    for (const coin of [...scene.coins.getChildren()]) {
-      if (!coin.active) continue
-      scene.player.setVelocity(0, 0)
-      scene.player.setPosition(coin.x, coin.y)
-      await nextFrame()
-      await nextFrame()
-    }
-  })
-}
-
-/** Park him on the first coin only, leaving the rest of the level unfinished. */
-async function collectFirstCoin(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    const scene = window.__GAME__?.scene.getScene('Game') as unknown as TouchProbe
-    const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
-    const coin = scene.coins.getChildren()[0]
-    if (!coin) return
-    scene.player.setVelocity(0, 0)
-    scene.player.setPosition(coin.x, coin.y)
-    await nextFrame()
-    await nextFrame()
-  })
-}
-
-function watchForErrors(page: Page): string[] {
-  const errors: string[] = []
-  page.on('console', (message) => {
-    if (message.type() === 'error') errors.push(message.text())
-  })
-  page.on('pageerror', (error) => errors.push(error.message))
-  return errors
 }

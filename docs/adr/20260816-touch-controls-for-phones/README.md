@@ -54,7 +54,11 @@ directly to prove two fingers land on two buttons. Playwright's own
 
 **Held upright, the game asks to be turned sideways.** A full-screen nudge with
 a phone shape that animates the turn, so it works before you can read. The game
-keeps running underneath — covered, not stopped — so turning back is instant.
+**sleeps** underneath it rather than being torn down, so turning back picks up
+mid-jump. Sleeping matters: nothing shows through that card, so a running game
+behind it draws sixty pictures a second that nobody will ever see, and a phone
+left face up does that all afternoon. It also stops the level clock, which is
+the answer you want anyway — turning your phone should not cost you a best time.
 The phone shape is drawn in CSS rather than written as 📱: a missing emoji font
 renders an empty box, which is what happened the first time.
 
@@ -97,8 +101,9 @@ so the pixels stay crisp; on a phone that cap is lifted and it fills the screen.
 - Portrait is refused rather than supported. Playing without turning the phone
   would mean a picture half the size, or a second level layout, and one layout
   that works is worth more here than two that need maintaining.
-- The clock keeps running while the "turn sideways" nudge is up. It is honest —
-  the game really is running — but a rotate mid-run costs you a second.
+- Turning the phone upright mid-run stops the game dead. That is deliberate, but
+  it does mean a rotate is a way to pause, which a stopwatch purist could call
+  cheating. For a game whose whole audience is one child, that is fine.
 - On a very wide phone (many are nearer 2.4:1 than 16:9) there are black bars
   down both sides. Filling them means redesigning both levels.
 - `user-scalable=no` turns off pinch zoom. For a game that already scales itself

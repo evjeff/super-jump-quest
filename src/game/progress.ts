@@ -52,7 +52,7 @@ export function bannerText(
 ): string {
   const lines =
     progress.kind === 'game-complete'
-      ? ['YOU WIN!', ...extraLines, ...playAgainLines(controls)]
+      ? ['YOU WIN!', ...extraLines, playAgainLine(controls)]
       : [
           `LEVEL ${progress.levelIndex} DONE!`,
           ...extraLines,
@@ -61,18 +61,20 @@ export function bannerText(
   return lines.join('\n')
 }
 
-function playAgainLines(controls: ControlHint): string[] {
-  if (controls === 'touch') return ['tap the screen to play again from level 1']
-  return ['press R to play again from level 1']
+function playAgainLine(controls: ControlHint): string {
+  // Short for the same reason as the lines below: see the note there.
+  if (controls === 'touch') return 'tap to play again from level 1'
+  return 'press R to play again from level 1'
 }
 
 function nextLevelLines(nextLevelNumber: number, controls: ControlHint): string[] {
   // On a phone, "start over" is the ↻ button in the top corner rather than a
   // key — and it has to be named here, because a faint symbol in a corner is
   // not something a seven-year-old goes looking for on their own.
-  // Kept short on purpose: the banner is drawn in one long line of big
-  // monospace text, and a longer sentence than this runs off both edges of the
-  // screen on the narrowest phone.
+  // Kept short on purpose. The banner is drawn as one lump of 40px monospace,
+  // centred, and it does not wrap: at that size 34 characters is already the
+  // full 960 of the screen, and anything longer is simply cut off at BOTH ends.
+  // `progress.test.ts` holds every touch line to that limit.
   if (controls === 'touch') {
     return [`tap the screen for level ${nextLevelNumber}`, 'or tap ↻ to start over']
   }

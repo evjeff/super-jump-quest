@@ -12,6 +12,7 @@ import { coinSound, isDistinctLanding, jumpSound, landingSound, winSound } from 
 import { squashScale } from '../game/squash'
 import type { BestTimes } from '../game/timer'
 import { bestTimeFor, finishBannerLines, formatTime, recordTime } from '../game/timer'
+import type { TouchControlId } from '../game/touchControls'
 import type { Level } from '../levels'
 import { LEVELS } from '../levels'
 import { loadBestTimes, saveBestTimes } from '../storage/bestTimes'
@@ -106,7 +107,7 @@ export class GameScene extends Phaser.Scene {
     this.bindKeys()
     // Only a touchscreen gets on-screen buttons. Built last so they're drawn
     // over the top of everything else.
-    this.touchPad = wantsTouchControls(this.game) ? new TouchPad(this) : null
+    this.touchPad = wantsTouchControls() ? new TouchPad(this) : null
     this.beeper = createBeeper(webAudioOutput(this.sound), TUNING.sound.volume)
   }
 
@@ -123,7 +124,7 @@ export class GameScene extends Phaser.Scene {
     // anything else so a kid stuck on a hard jump can start over without
     // reloading the page, and so that pressing ↻ on the finish banner starts
     // the game over rather than counting as a "tap to carry on".
-    if (justDown(this.restartKey) || this.touchPad?.wasJustPressed('restart')) {
+    if (justDown(this.restartKey) || this.touchTapped('restart')) {
       this.scene.restart({ levelIndex: 0, points: 0 })
       return
     }
@@ -152,7 +153,7 @@ export class GameScene extends Phaser.Scene {
     // leave a finger on the jump button, and the very next press of it would
     // otherwise wipe away a "NEW BEST TIME!" nobody had time to read.
     const bannerSettled = this.time.now - this.bannerShownAt >= TUNING.touch.bannerTapDelayMs
-    const tapped = bannerSettled && this.touchPad?.wasScreenTapped() === true
+    const tapped = bannerSettled && (this.touchPad?.wasScreenTapped() ?? false)
 
     if (outcome.kind === 'next-level') {
       if (justDown(this.nextLevelKey) || tapped) {
@@ -163,6 +164,20 @@ export class GameScene extends Phaser.Scene {
 
     // The game is won. There is no next level, so a tap does what R does.
     if (tapped) this.scene.restart({ levelIndex: 0, points: 0 })
+  }
+
+  /**
+   * Is this on-screen button being held? Always no on a computer, which has no
+   * on-screen buttons — the keyboard is asked separately, and either can say
+   * yes.
+   */
+  private touchHeld(id: TouchControlId): boolean {
+    return this.touchPad?.isHeld(id) ?? false
+  }
+
+  /** Did this on-screen button go down this frame? Always no on a computer. */
+  private touchTapped(id: TouchControlId): boolean {
+    return this.touchPad?.wasJustPressed(id) ?? false
   }
 
   // --- setup -------------------------------------------------------------
@@ -273,8 +288,8 @@ export class GameScene extends Phaser.Scene {
     // and a laptop with a touchscreen can use whichever is nearer.
     const velocityX = horizontalVelocity(
       {
-        left: anyKeyDown(this.leftKeys) || this.touchPad?.isHeld('left') === true,
-        right: anyKeyDown(this.rightKeys) || this.touchPad?.isHeld('right') === true,
+        left: anyKeyDown(this.leftKeys) || this.touchHeld('left'),
+        right: anyKeyDown(this.rightKeys) || this.touchHeld('right'),
       },
       TUNING.player.speed,
     )
@@ -315,8 +330,7 @@ export class GameScene extends Phaser.Scene {
     this.jumpState = syncGrounded(this.jumpState, onGround)
 
     const jumpPressed =
-      this.jumpKeys.some((key) => Phaser.Input.Keyboard.JustDown(key)) ||
-      this.touchPad?.wasJustPressed('jump') === true
+      this.jumpKeys.some((key) => Phaser.Input.Keyboard.JustDown(key)) || this.touchTapped('jump')
     if (jumpPressed && canJump(this.jumpState, TUNING.player.maxJumps)) {
       this.player.setVelocityY(-TUNING.player.jumpVelocity)
       this.jumpState = registerJump(this.jumpState)

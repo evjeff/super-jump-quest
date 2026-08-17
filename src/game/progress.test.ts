@@ -70,18 +70,28 @@ describe('bannerText', () => {
     })
 
     it('keeps every line short enough to fit on a phone', () => {
-      // The banner is one lump of big monospace text with no wrapping. Around
-      // 34 characters is as wide as the screen gets.
-      const longest = bannerText({ kind: 'next-level', levelIndex: 9 }, ['TIME 0:24.6'], 'touch')
-        .split('\n')
-        .reduce((widest, line) => Math.max(widest, line.length), 0)
+      // The banner is one lump of 40px monospace with no wrapping, so 34
+      // characters is already the full width of the screen and anything longer
+      // is cut off at both ends.
+      //
+      // BOTH endings are checked here. Only checking the next-level one is how
+      // the win screen came to ship at 41 characters, quietly clipping the "1"
+      // off "play again from level 1".
+      const banners = [
+        bannerText({ kind: 'next-level', levelIndex: 9 }, ['TIME 0:24.6'], 'touch'),
+        bannerText({ kind: 'game-complete' }, ['TIME 0:24.6', 'NEW BEST TIME!'], 'touch'),
+      ]
 
-      expect(longest).toBeLessThanOrEqual(34)
+      for (const banner of banners) {
+        for (const line of banner.split('\n')) {
+          expect(line.length).toBeLessThanOrEqual(34)
+        }
+      }
     })
 
     it('asks for a tap instead of the R key on the win screen', () => {
       expect(bannerText({ kind: 'game-complete' }, [], 'touch')).toBe(
-        'YOU WIN!\ntap the screen to play again from level 1',
+        'YOU WIN!\ntap to play again from level 1',
       )
     })
 
