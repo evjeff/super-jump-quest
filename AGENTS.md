@@ -13,7 +13,10 @@ architectural elegance. The project fails by being abandoned, not by being messy
   **Check here first: most requests are a one-number edit.**
 - `src/levels/` — level layouts as plain data (platforms and coins as x/y numbers).
 - `src/game/` — the rules: jumping, scoring, movement. Pure functions, no Phaser,
-  no DOM. Must stay importable in a plain Node test.
+  no DOM. Must stay importable in a plain Node test. Also holds the two kinds of
+  content that are pure data and so can be checked the same cheap way:
+  `sounds.ts` (sound recipes) and `pipSprite.ts` (the player, as a grid of
+  letters).
 - `src/audio/` — the only place that makes noise. Turns the sound recipes in
   `src/game/sounds.ts` into Web Audio notes. No sound files anywhere.
 - `src/scenes/` — Phaser scenes: drawing, input, physics wiring. Thin; delegates
@@ -89,7 +92,12 @@ Use `pnpm`, not `npm` — the lockfile is `pnpm-lock.yaml` and CI runs
 5. **A new sound?** Add a recipe to `src/game/sounds.ts` — pitches, durations and
    volumes, not audio files. Do not add `.wav`/`.mp3` assets; see
    `docs/adr/20260816-synthesized-sound-effects/`.
-6. Build **one** idea at a time, end to end, before starting the next. Ideas
+6. **How something LOOKS?** Colours are the `colors` block of `src/tuning.ts` —
+   `colors.pip` for the player, `colors.night` for the sky. The player's shape is
+   the letter grid in `src/game/pipSprite.ts`. All the actual drawing is
+   `src/scenes/BootScene.ts`. Do not add `.png`/`.jpg` assets; see
+   `docs/adr/20260817-artwork-drawn-in-code/`.
+7. Build **one** idea at a time, end to end, before starting the next. Ideas
    queue in `IDEAS.md`. A finished small feature beats three half-built ones —
    this is the single biggest reason hobby game projects die.
 
