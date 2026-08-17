@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isStandingOn, platformPosition, platformVelocity } from './movingPlatform'
+import { isStandingOn, pickRide, platformPosition, platformVelocity } from './movingPlatform'
 
 /** A ferry that slides 300 to the right and back, three seconds each way. */
 const FERRY = { x: 100, y: 400, moves: { moveX: 300, seconds: 3 } }
@@ -166,5 +166,40 @@ describe('isStandingOn', () => {
     expect(isStandingOn({ ...STANDING, left: 298, right: 330 }, DECK)).toBe(true)
     // ...and no once he is past the end entirely.
     expect(isStandingOn({ ...STANDING, left: 300, right: 332 }, DECK)).toBe(false)
+  })
+})
+
+describe('pickRide', () => {
+  /** A deck from x 100 to 300, with its surface at y 400. */
+  const DECK = { left: 100, right: 300, top: 400, bottom: 424 }
+  /** The one next door, carrying straight on from x 300 to 500. */
+  const NEXT_DOOR = { left: 300, right: 500, top: 400, bottom: 424 }
+  /** Someone stood in the middle of the first one. */
+  const STANDING = { left: 184, right: 216, top: 352, bottom: 400 }
+
+  it('is nobody when there is nothing to ride', () => {
+    expect(pickRide(STANDING, [])).toBe(null)
+  })
+
+  it('is nobody when he is nowhere near any of them', () => {
+    expect(pickRide({ ...STANDING, bottom: 200 }, [DECK, NEXT_DOOR])).toBe(null)
+  })
+
+  it('is the one he is standing on', () => {
+    expect(pickRide(STANDING, [DECK, NEXT_DOOR])).toBe(0)
+    expect(pickRide({ ...STANDING, left: 384, right: 416 }, [DECK, NEXT_DOOR])).toBe(1)
+  })
+
+  it('is the one he has most of his feet on, not the first one listed', () => {
+    // Squarely on the second, with a toe back over the end of the first.
+    const mostlyOnTheSecond = { ...STANDING, left: 298, right: 330 }
+    expect(pickRide(mostlyOnTheSecond, [DECK, NEXT_DOOR])).toBe(1)
+    // ...and the answer does not depend on the order they were written in.
+    expect(pickRide(mostlyOnTheSecond, [NEXT_DOOR, DECK])).toBe(0)
+  })
+
+  it('still rides one he is only just on, when it is the only thing under him', () => {
+    const toesOnly = { ...STANDING, left: 298, right: 330 }
+    expect(pickRide(toesOnly, [DECK])).toBe(0)
   })
 })

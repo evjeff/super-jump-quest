@@ -15,8 +15,6 @@ import { LEVEL_1 } from './level1'
 import { LEVEL_2 } from './level2'
 import { LEVEL_3 } from './level3'
 
-export type { PlatformMotion }
-
 export interface Platform {
   x: number
   y: number

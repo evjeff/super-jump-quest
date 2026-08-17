@@ -10,9 +10,9 @@
 
 | Check | Result |
 |---|---|
-| `pnpm check` (typecheck, lint, unit tests, build) | Green. 153 unit tests, up from 128. |
+| `pnpm check` (typecheck, lint, unit tests, build) | Green. 158 unit tests, up from 128. |
 | `pnpm test:e2e` | Green. 20 browser tests, up from 15. Run four times over, no flakes. |
-| Coverage on `src/game/` | Still over its thresholds; `movingPlatform.ts` has 25 cases. |
+| Coverage on `src/game/` | Still over its thresholds; `movingPlatform.ts` has 30 cases. |
 | Levels 1 and 2 | Unchanged files. Their tests and the phone tests pass untouched. |
 | Riding, sideways | His place on the deck does not move at all — under 1px over a full crossing. |
 | Riding, through a jump | Under 2px, from a hundred before the ride was rebuilt. |
@@ -75,6 +75,33 @@ the rider by hand, *on top of* the carry Phaser already does. That would have
 moved him at twice the ferry's speed and dropped him off the front. It was
 caught by reading `ProcessY.js` before writing the code. The hand-written carry
 is what the game ended up with — but instead of Phaser's, never alongside it.
+
+## What review changed
+
+A code review and a four-angle cleanup pass ran over the finished branch. One
+finding was worth acting on and it took three of them to settle it:
+
+**`updateRide` took the first platform it found him standing on.** With any
+pixel of overlap counting, a level that ever docked a ferry alongside a ledge at
+the same height would hand him to whichever was written first — a toe over the
+ferry's end would drag him off a ledge he was standing squarely on. Unreachable
+in level 3 today.
+
+The first fix put the tie-break in the scene, and the review of that fix was
+sharper than the fix: real rule logic, sitting where no unit test can reach it,
+justified by a level that does not exist. It is now `pickRide` in
+`src/game/movingPlatform.ts` with its own tests — which satisfies the
+correctness point and the "rules live in `src/game/`" rule at the same time,
+and leaves the scene shorter than before.
+
+Also taken: `platformPosition` and `platformVelocity` had a byte-identical copy
+of the phase calculation, which is exactly the drift between position and speed
+that this design exists to prevent. One copy now, in `tripPhase`.
+
+Declined: factoring the one-line `nextFrame` helper out of the five browser
+tests that declare it. It cannot cross the `page.evaluate` boundary, and
+`tests/probe.ts` says out loud that it prefers plain repetition to shipping
+clever helpers into the browser.
 
 ## What was deliberately not done
 

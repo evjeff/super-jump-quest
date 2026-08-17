@@ -83,16 +83,28 @@ export function platformPosition(platform: Movable, elapsedMs: number): Point {
   const moves = platform.moves
   if (!moves || !(moves.seconds > 0)) return home
 
-  const { moveX = 0, moveY = 0, seconds, startAt = 0 } = moves
-
-  // Two trips make a full there-and-back, so the phase runs 0 → 2 and wraps.
-  // The `+ 2` keeps it positive if the clock is ever handed a negative number.
-  const phase = (((elapsedMs / 1000 / seconds + startAt) % 2) + 2) % 2
+  const { moveX = 0, moveY = 0 } = moves
 
   // Out on the first half of the phase, back on the second.
+  const phase = tripPhase(moves, elapsedMs)
   const travelled = phase <= 1 ? phase : 2 - phase
 
   return { x: home.x + moveX * travelled, y: home.y + moveY * travelled }
+}
+
+/**
+ * How far through a there-and-back the platform is: 0 at home, 1 at the far
+ * end, 2 back home again, and round it goes.
+ *
+ * Both the position and the speed are worked out from this, and they have to
+ * agree — a passenger's place on the deck is exact only because the two of them
+ * come from the same number. So there is one copy of it, here.
+ *
+ * The `+ 2` keeps it positive if the clock is ever handed a negative number.
+ */
+function tripPhase(moves: PlatformMotion, elapsedMs: number): number {
+  const { seconds, startAt = 0 } = moves
+  return (((elapsedMs / 1000 / seconds + startAt) % 2) + 2) % 2
 }
 
 /**
@@ -109,10 +121,9 @@ export function platformVelocity(platform: Movable, elapsedMs: number): Point {
   const moves = platform.moves
   if (!moves || !(moves.seconds > 0)) return { x: 0, y: 0 }
 
-  const { moveX = 0, moveY = 0, seconds, startAt = 0 } = moves
+  const { moveX = 0, moveY = 0, seconds } = moves
 
-  const phase = (((elapsedMs / 1000 / seconds + startAt) % 2) + 2) % 2
-  const heading = phase < 1 ? 1 : -1
+  const heading = tripPhase(moves, elapsedMs) < 1 ? 1 : -1
 
   return { x: (moveX / seconds) * heading, y: (moveY / seconds) * heading }
 }
@@ -130,4 +141,32 @@ export function isStandingOn(player: Bounds, platform: Bounds): boolean {
   const somePartOverIt = player.right > platform.left && player.left < platform.right
 
   return feetAtDeckHeight && somePartOverIt
+}
+
+/**
+ * Which of these decks is he riding? The answer is its place in the list, or
+ * null if he isn't on any of them.
+ *
+ * Whichever he has **most** of his feet on, rather than whichever happens to be
+ * written first in the level file. Standing with one toe over the end of a
+ * ferry counts as riding it — that's on purpose, because if you can stand there
+ * you can ride there — but only when there is nothing else under you. Park a
+ * ferry alongside a ledge at the same height, stand squarely on the ledge with
+ * a toe out over the ferry, and "first one in the list" would drag you off it.
+ */
+export function pickRide(player: Bounds, decks: Bounds[]): number | null {
+  let riding: number | null = null
+  let mostUnderfoot = 0
+
+  for (const [index, deck] of decks.entries()) {
+    if (!isStandingOn(player, deck)) continue
+
+    const underfoot = Math.min(player.right, deck.right) - Math.max(player.left, deck.left)
+    if (underfoot <= mostUnderfoot) continue
+
+    mostUnderfoot = underfoot
+    riding = index
+  }
+
+  return riding
 }

@@ -4,7 +4,7 @@ import { createBeeper, webAudioOutput } from '../audio/beeper'
 import type { JumpState } from '../game/jump'
 import { canJump, createJumpState, justLanded, registerJump, syncGrounded } from '../game/jump'
 import { facingDirection, horizontalVelocity } from '../game/movement'
-import { isStandingOn, platformPosition, platformVelocity } from '../game/movingPlatform'
+import { pickRide, platformPosition, platformVelocity } from '../game/movingPlatform'
 import type { ControlHint, Progress } from '../game/progress'
 import { afterLevel, bannerText } from '../game/progress'
 import type { ScoreState } from '../game/score'
@@ -376,9 +376,11 @@ export class GameScene extends Phaser.Scene {
    * the clock stops when the finish banner goes up, so the platforms stop too.
    */
   private movePlatforms(deltaMs: number): void {
+    const clock = this.platformClock
+
     for (const platform of this.movingPlatforms) {
       const { sprite, spec } = platform
-      const { x, y } = platformPosition(spec, this.platformClock)
+      const { x, y } = platformPosition(spec, clock)
 
       // Feet down on the one he's riding: he goes exactly where it goes, moved
       // by the platform's own step rather than handed its speed and left to
@@ -427,26 +429,24 @@ export class GameScene extends Phaser.Scene {
    */
   private updateRide(): void {
     const body = this.player.body as Phaser.Physics.Arcade.Body
-    this.feetOnRide = false
+    const decks = this.movingPlatforms.map(({ sprite, spec }) => ({
+      left: sprite.x - spec.width / 2,
+      right: sprite.x + spec.width / 2,
+      top: sprite.y - spec.height / 2,
+      bottom: sprite.y + spec.height / 2,
+    }))
 
-    for (const platform of this.movingPlatforms) {
-      const { sprite, spec } = platform
-      const deck = {
-        left: sprite.x - spec.width / 2,
-        right: sprite.x + spec.width / 2,
-        top: sprite.y - spec.height / 2,
-        bottom: sprite.y + spec.height / 2,
-      }
+    const riding = pickRide(body, decks)
+    const platform = riding === null ? undefined : this.movingPlatforms[riding]
+    this.feetOnRide = platform !== undefined
 
-      if (isStandingOn(body, deck)) {
-        this.ride = platform
-        this.feetOnRide = true
-        // Remembered every frame his feet are down, so the moment he jumps it
-        // already holds the speed he is leaving with.
-        this.rideVelocityX =
-          platformVelocity(spec, this.platformClock).x * TUNING.platforms.movingSpeed
-        return
-      }
+    if (platform) {
+      this.ride = platform
+      // Remembered every frame his feet are down, so the moment he jumps it
+      // already holds the speed he is leaving with.
+      this.rideVelocityX =
+        platformVelocity(platform.spec, this.platformClock).x * TUNING.platforms.movingSpeed
+      return
     }
 
     // Not stood on a moving platform. If he has come to rest on something, it

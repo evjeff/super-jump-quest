@@ -59,8 +59,16 @@ Standing on a sliding ledge has to *carry* you. That is the whole feature; a
 platform that slides out from under your feet is a bug with a nice colour.
 
 **Whichever moving platform he last stood on is his "ride", and it stays his
-ride until he lands on something else.** It works differently depending on
-whether his feet are down:
+ride until he lands on something else.** Which one that is, when he could be on
+more than one, is `pickRide` in `src/game/movingPlatform.ts`: whichever deck he
+has **most** of his feet on, rather than whichever happens to be written first
+in the level file. Level 3 never asks the question — no two of its platforms sit
+at the same height beside each other — but level files are data a nine-year-old
+is invited to edit, and "first one in the list wins" is the kind of answer that
+is silently wrong the day someone docks a ferry against a ledge. It is a rule,
+so it lives with the rules and has its own tests.
+
+The ride works differently depending on whether his feet are down:
 
 - **Feet on the deck**: the platform is moved to where the clock says it should
   be, and he is moved by exactly the same step. Not given its speed — moved by
