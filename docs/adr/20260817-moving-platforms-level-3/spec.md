@@ -2,9 +2,9 @@
 
 ## Current Status
 
-- **State:** `[DRAFT]`
+- **State:** `[COMPLETE]`
 - **Last updated:** 2026-08-17
-- **Next action:** Review with the person who asked for it, then work `plan.md`.
+- **Next action:** Built. See `review.md`.
 
 ## The ask
 

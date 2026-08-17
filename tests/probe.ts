@@ -33,6 +33,8 @@ export type GameProbe = {
     setPosition(x: number, y: number): void
   }
   coins: { getChildren(): { x: number; y: number; active: boolean }[] }
+  /** The platforms that slide. Empty in a level where nothing moves. */
+  movingPlatforms: { sprite: { x: number; y: number; displayHeight: number } }[]
   hud: { text: string }
   banner: { text: string }
   level: { coins: unknown[]; platforms: unknown[] }
@@ -62,6 +64,26 @@ export async function waitForGameScene(page: Page): Promise<void> {
       { timeout: 15_000 },
     )
     .toBe(true)
+}
+
+/**
+ * Jump straight into a level without playing the ones before it.
+ *
+ * Level 3 is the third thing you reach by playing, and a test that has to
+ * finish two levels first is two levels' worth of things that can go wrong
+ * before it gets to what it is actually checking. The full walk through every
+ * level is its own test; this is for the ones about a single level.
+ */
+export async function goToLevel(page: Page, levelIndex: number): Promise<void> {
+  await page.evaluate((index) => {
+    const scene = window.__GAME__?.scene.getScene('Game') as unknown as {
+      scene: { restart(data: { levelIndex: number; points: number }): void }
+    }
+    scene.scene.restart({ levelIndex: index, points: 0 })
+  }, levelIndex)
+
+  await waitForGameScene(page)
+  await expect.poll(() => hud(page), { timeout: 5_000 }).toContain(`LEVEL ${levelIndex + 1}`)
 }
 
 export async function hud(page: Page): Promise<string> {

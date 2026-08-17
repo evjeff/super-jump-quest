@@ -1,18 +1,19 @@
 # Platforms move by clock time, and Phaser carries the rider
 
 - **Date:** 2026-08-17
-- **Status:** Proposed
-
-> Proposed until level 3 has been played by hand. See `tasks.md`.
+- **Status:** Accepted
 
 ## Documents in this package
 
-- [spec.md](spec.md) `[DRAFT]` - What a moving platform has to feel like, and
+- [spec.md](spec.md) `[COMPLETE]` - What a moving platform has to feel like, and
   what level 3 asks of a player. Read when arguing about scope.
-- [plan.md](plan.md) `[DRAFT]` - The data shape, the one pure rule, and how it
+- [plan.md](plan.md) `[COMPLETE]` - The data shape, the one pure rule, and how it
   is wired into Phaser. Read before touching the code.
-- [tasks.md](tasks.md) `[IN PROGRESS]` - The build order, and why the mechanic
-  is proven before the level is designed. Read to pick up where this left off.
+- [tasks.md](tasks.md) `[COMPLETE]` - The build order, and why the mechanic was
+  proven before the level was designed around it. Read for what actually
+  happened at each step.
+- [review.md](review.md) `[COMPLETE]` - What was checked, what the checks found,
+  and what is still open. Read before trusting any of the above.
 
 ## Context
 
@@ -59,18 +60,35 @@ platform that slides out from under your feet is a bug with a nice colour.
 
 Phaser's Arcade physics already does it. Once the player has been separated onto
 the top of an immovable body, `ProcessY.js` runs `body.x += distance *
-friction.x`, and `friction.x` defaults to `1` on every body. So the carry costs
-nothing as long as moving platforms are `immovable` bodies and the player
-collides with them normally.
+friction.x`. So the carry costs nothing, as long as moving platforms are
+`immovable` bodies, the player collides with them normally — and their friction
+is not zero.
 
-We say this out loud because the hand-written version is very tempting and
-**wrong**: adding the platform's speed to the player's own velocity each frame,
-which is what the first draft of the plan did, gives the player the carry
-*twice*. He crosses the ferry at double its speed and drops off the front. It
-was caught by reading `node_modules/phaser/src/physics/arcade/ProcessY.js`
-rather than by playing the game, which is the cheaper of the two ways to find
-it. Anyone tempted to add a carry later should set `friction.x = 0` on the
-platform bodies in the same change, or hit the same bug.
+That last clause is the trap, and it cost the first attempt at this. A Body's
+own default `friction.x` is `1`, so reading `Body.js` says riding works out of
+the box. But these platforms are made by a **physics group**, and
+`PhysicsGroup.js` reads `frictionX` out of the group config with a default of
+`0` and stamps it onto every body it creates. The platform slid; the player
+stood in mid-air exactly where he got on. Nothing in the physics looked wrong —
+the velocity, the direction, the collision were all correct — because the bug
+was one silently-defaulted number. So `frictionX: 1` is passed explicitly, with
+a comment saying it is load-bearing.
+
+The other half of this is worth saying out loud too, because the hand-written
+alternative is very tempting and **wrong**: adding the platform's speed to the
+player's own velocity each frame, which is what the first draft of this plan
+called for, gives the player the carry *twice*. He crosses the ferry at double
+its speed and drops off the front. That one was caught by reading
+`ProcessY.js` before writing the code rather than by playing the game — the
+cheaper of the two ways to find it. Anyone tempted to add a carry later must set
+`friction.x = 0` on the platform bodies in the same change, or hit it.
+
+Up and down is left to ordinary collision separation: a rising platform pushes
+the resting player up, and on a falling one gravity keeps him in contact. That
+was a guess about somebody else's engine, so it was measured rather than
+trusted. Over a four-second ride that includes the turnaround at the top, the
+player travels 217.4 pixels to the platform's 216.3, drifts at most 4.5 pixels
+from the deck, and lands exactly once.
 
 ### Position is handed to Phaser through `directControl`, not by teleporting
 
@@ -111,10 +129,15 @@ too, but it is the same idea written by hand and unwired from the riding maths.
   real cost; it is paid because one is a design decision and the other is a
   Saturday-morning decision, and a kid should not have to open a level file to
   make the game easier.
-- The carry depends on undocumented-ish behaviour inside Phaser's Arcade
-  separation. A Phaser upgrade could change it. The browser test in task 9 is
-  there precisely so that shows up as a red test rather than as an unplayable
-  level.
+- The carry depends on behaviour inside Phaser's Arcade separation, switched on
+  by a group-config number that defaults to off. A Phaser upgrade could change
+  either. The browser tests are there precisely so that shows up as a red test
+  rather than as an unplayable level.
+- The lift test measures how much of the ride he spends in contact with the
+  deck, not how many times he lands. Landings were the obvious measure and are
+  the wrong one — a machine busy enough to drop a frame gives him one long fall,
+  and `player.bounce` turns that into a real bounce on any platform, moving or
+  not. On a loaded laptop that read as 8 bounces while the ride was perfect.
 - Platforms freeze on the finish banner. It looks slightly odd if you are
   standing on one when the last coin is grabbed.
 - The motion is a straight there-and-back at a constant speed, which turns

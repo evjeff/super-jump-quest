@@ -2,66 +2,82 @@
 
 ## Current Status
 
-- **State:** `[IN PROGRESS]`
+- **State:** `[COMPLETE]`
 - **Last updated:** 2026-08-17
-- **Next action:** Task 1.
+- **Next action:** A person plays level 3 start to finish. See `review.md`.
 
 Read `plan.md` for why each of these is shaped the way it is.
 
-Order matters in one place: **the mechanic is proven in a browser (task 6)
-before the level is designed around it (task 7).** Designing a level for a ride
-that does not work is the expensive mistake available here.
+Order mattered in one place: **the mechanic was proven in a browser (task 6)
+before the level was designed around it (task 7).** Designing a level for a ride
+that does not work was the expensive mistake available here, and task 6 found
+that the ride did not, in fact, work.
 
 ## Tasks
 
-- [ ] **1. The rule, test first.** `src/game/movingPlatform.test.ts`, then
-      `src/game/movingPlatform.ts`. Watch it fail before making it pass.
-      Cases: a platform with no `moves` never leaves home; at `seconds` it is at
-      the far end; at `2 × seconds` it is home again; halfway out it is halfway;
-      it keeps going back and forth long after the first trip; `startAt` shifts
-      where in the trip it begins; `moveY` works the same as `moveX`; a
-      negative distance goes the other way; both at once moves it diagonally.
-- [ ] **2. The data.** `PlatformMotion` and the optional `moves` on `Platform`
-      in `src/levels/index.ts`, commented for a kid. Nothing else changes —
-      levels 1 and 2 still typecheck untouched.
-- [ ] **3. The knob and the colour.** `platforms.movingSpeed` and
-      `colors.movingPlatform` in `src/tuning.ts`; the second texture in
-      `BootScene`.
-- [ ] **4. The wiring.** `GameScene` builds moving platforms into their own
-      group with `directControl` on, colliding with the player, and sets each
-      one's position every frame from the level clock. `handleMovement` is not
-      touched.
-- [ ] **5. A throwaway moving platform** somewhere harmless, so tasks 6's
-      browser check has something to stand on before level 3 exists. Removed at
-      the end of task 7.
-- [ ] **6. Prove the ride in a real browser.** `pnpm dev`, stand on a sliding
-      platform, and confirm he is carried **at its speed, not twice it** — the
-      failure the plan warns about looks like sliding off the front. Then a
-      rising one and a falling one: no bouncing, no stuttering, no repeated
-      landing thud. **If riding does not work, stop and fix it here**, before
-      any level is built on it.
-- [ ] **7. Level 3.** `src/levels/level3.ts` and its line in `LEVELS`, built to
-      the sketch in `plan.md`, then played and adjusted until it is beatable and
-      fun. Remove the throwaway from task 5.
-- [ ] **8. Fix the browser test the third level breaks.** Extend the level walk
-      in `tests/smoke.spec.ts` through level 3, with the same "nothing leaked
-      across" checks it already makes on level 2.
-- [ ] **9. A browser test for riding.** In the running game: a moving platform
-      changes position, and a player standing on it moves with it **without a
-      key being pressed**. Expose what it needs on `GameProbe` in
-      `tests/probe.ts`. This is the guardrail that catches the mechanic quietly
-      dying — the unit tests would still be green.
-- [ ] **10. `pnpm check` and `pnpm test:e2e`.** Both green, with output shown.
-      Coverage on `src/game/` still over its thresholds.
-- [ ] **11. Words.** `IDEAS.md` (moving platforms out of Someday, level 3 into
-      Done, in language a kid recognises), `README.md` (three levels, the new
-      knob in the tuning table).
-- [ ] **12. Play it.** Someone finishes level 3 with their hands. Then flip the
-      ADR to `Accepted` and write `review.md`.
+- [x] **1. The rule, test first.** `src/game/movingPlatform.test.ts`, then
+      `src/game/movingPlatform.ts`. Watched it fail on a missing module first.
+      13 cases; 141 unit tests green afterwards.
+- [x] **2. The data.** `PlatformMotion` and the optional `moves` on `Platform`.
+      Levels 1 and 2 typecheck untouched.
+- [x] **3. The knob and the colour.** `platforms.movingSpeed`,
+      `colors.movingPlatform`, and the second texture in `BootScene`.
+- [x] **4. The wiring.** Own group, `directControl`, position set each frame
+      from the level clock. `handleMovement` untouched, as planned.
+- [x] **5. A throwaway moving platform** on level 1's first stepping stone.
+- [x] **6. Prove the ride in a real browser.** **It did not work.** See the
+      notes below. Fixed, then re-measured: the player travels
+      44.38088888888865 to the ferry's 44.38088888888870.
+- [x] **7. Level 3.** Built, screenshotted, played by keyboard, and reworked
+      twice — see the notes. Throwaway from task 5 removed.
+- [x] **8. Fix the browser test the third level breaks.** The level walk now
+      goes 1 → 2 → 3 → `YOU WIN!`, with the same "nothing leaked across"
+      checks on level 3, plus one that level 3 actually has movers in it.
+- [x] **9. Browser tests for riding.** Two: a sliding platform carries him at
+      its speed, and a lift carries him up and down without bouncing.
+      `goToLevel` added to `tests/probe.ts` so they don't have to play two
+      levels first.
+- [x] **10. `pnpm check` and `pnpm test:e2e`.** 141 unit tests, 17 browser
+      tests, clean lint and build.
+- [x] **11. Words.** `IDEAS.md` and `README.md`.
+- [ ] **12. Play it.** Every individual move in the level has been driven with
+      real key presses and works. Nobody has yet played it start to finish with
+      their hands, which is the one thing left.
 
 ## Notes as we go
 
-_(Findings, surprises and things that turned out differently go here.)_
-
 - Task 0, before any of these: `pnpm check` green on an untouched worktree —
   128 unit tests, clean lint, clean build. So anything red from here is ours.
+
+- **Task 6 found the ride broken, and the cause was one silently-defaulted
+  number.** The platform moved correctly — right velocity, right direction,
+  right collision — and the player stood in mid-air exactly where he got on.
+  `friction.x` on the platform body was `0`. A Body's own default is `1`, but
+  `PhysicsGroup.js` defaults `frictionX` to `0` and stamps it onto every body it
+  creates, and these platforms come from a group. Adding `frictionX: 1` to the
+  group config fixed it. This is why the task existed.
+
+- **The vertical case needed no code at all**, which the plan guessed and this
+  measured: over a 4.3-second ride including the turnaround at the top, the
+  player travelled 217.4 to the lift's 216.3, drifted at most 4.5 pixels from
+  the deck, and landed once.
+
+- **The lift test's first measure was wrong.** It counted landings, and got 8 on
+  a loaded laptop while the ride was perfect — a dropped frame gives him one
+  long fall, and `player.bounce` turns that into a real bounce on any platform,
+  moving or not. It now measures the share of frames his feet are on the deck,
+  which a dropped frame barely dents and genuine bouncing halves.
+
+- **Level 3 was wrong twice, and both were about boarding the ferry**, which
+  three keyboard playtests found and no amount of staring at coordinates would
+  have:
+  1. Parked in the middle of the hole, there was about a third of a second in
+     every eight when a jump from the edge could reach it.
+  2. Parked over the ground so he could board from a standing start, it sat ten
+     pixels above his head — so jumping bonked him on its underside. A platform
+     you are standing under is a ceiling, not a lift.
+  It now waits five pixels past the end of the ground: never overhead, always
+  within one jump, with about a second and a third of window.
+
+- **A free coin.** Level 3 opened on `COINS 1/13` because a coin sat exactly on
+  the player's start position.

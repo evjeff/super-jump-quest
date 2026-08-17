@@ -3,6 +3,7 @@ import type { GameProbe } from './probe'
 import {
   banner,
   collectCoins,
+  goToLevel,
   hud,
   levelTimeMs,
   playerIsGrounded,
@@ -200,6 +201,34 @@ test('finishing a level starts the next one, and finishing the last one wins', a
   await page.waitForTimeout(1500)
 
   await collectCoins(page)
+  expect(await banner(page)).toContain('LEVEL 2 DONE!')
+
+  // Two levels' worth of points now, and they have to survive one more hop.
+  const scoreAfterLevel2 = (await hud(page)).match(/SCORE \d+/)?.[0] ?? ''
+  expect(scoreAfterLevel2).not.toBe(scoreAfterLevel1)
+
+  await holdKey(page, 'KeyN')
+  await expect.poll(() => hud(page), { timeout: 5_000 }).toContain('LEVEL 3')
+
+  const level3 = await levelState(page)
+  expect(level3.coinsAlive).toBe(level3.coinsInLevel)
+  expect(level3.coinsInLevel).toBeGreaterThan(0)
+  expect(level3.platforms).toBeGreaterThan(0)
+  // The level built around moving platforms has to actually have some — a
+  // level 3 whose ferries quietly stopped being built would still look fine
+  // to every check above this line.
+  expect(level3.movingPlatforms).toBeGreaterThan(0)
+  expect(level3.hud).toContain('COINS 0/')
+  expect(level3.hud).toContain(scoreAfterLevel2)
+  expect(level3.banner).toBe('')
+  expect(level3.jumpsUsed).toBe(0)
+  expect(level3.squashCleared).toBe(true)
+  expect(level3.levelTimeMs).toBeLessThan(600)
+  expect(level3.hud).toContain('THIS LEVEL 0:00')
+
+  await page.waitForTimeout(1500)
+
+  await collectCoins(page)
   expect(await banner(page)).toContain('YOU WIN!')
 
   await holdKey(page, 'KeyR')
@@ -296,6 +325,134 @@ test('the level clock runs, stops at the finish, and the best time is remembered
   expect(consoleErrors).toEqual([])
 })
 
+/**
+ * The guardrail for the whole of level 3.
+ *
+ * Being carried is the entire feature. A ferry that slides out from under his
+ * feet, leaving him standing in mid-air, is a bug with a nice colour — and
+ * every unit test would still be green, because where a platform *is* is pure
+ * maths and that part would be fine.
+ *
+ * It is also the thing most likely to break by accident. Arcade does the
+ * carrying itself, using the platform's `friction.x`, and a physics group sets
+ * that to 0 unless you ask for 1. It did, the first time. So this test asks
+ * the only question that matters: with nothing pressed, does he go exactly as
+ * far as the ferry does?
+ */
+test('a sliding platform carries a player standing on it, at its speed', async ({ page }) => {
+  const consoleErrors = watchForErrors(page)
+
+  await page.goto('/')
+  await waitForGameScene(page)
+  await goToLevel(page, 2)
+
+  const ride = await page.evaluate(async () => {
+    const scene = window.__GAME__?.scene.getScene('Game') as unknown as GameProbe
+    const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
+    // The first mover in level 3 is the ferry across the hole.
+    const ferry = scene.movingPlatforms[0] as GameProbe['movingPlatforms'][0]
+
+    // Drop him onto its deck and let him settle. Nothing is pressed after this.
+    scene.player.setVelocity(0, 0)
+    scene.player.setPosition(ferry.sprite.x, ferry.sprite.y - 40)
+    for (let i = 0; i < 30; i += 1) await nextFrame()
+
+    const gapAtStart = scene.player.x - ferry.sprite.x
+    let platformTravel = 0
+    let playerTravel = 0
+    let lastPlatform = ferry.sprite.x
+    let lastPlayer = scene.player.x
+
+    for (let i = 0; i < 60; i += 1) {
+      await nextFrame()
+      platformTravel += ferry.sprite.x - lastPlatform
+      playerTravel += scene.player.x - lastPlayer
+      lastPlatform = ferry.sprite.x
+      lastPlayer = scene.player.x
+    }
+
+    return { platformTravel, playerTravel, gapAtStart, gapAtEnd: scene.player.x - ferry.sprite.x }
+  })
+
+  // The ferry went somewhere, so there was something to be carried by.
+  expect(Math.abs(ride.platformTravel)).toBeGreaterThan(20)
+  // He went exactly as far. Twice as far would mean he is being carried once
+  // by Arcade and once by us, and he would slide off the front of the ferry.
+  expect(ride.playerTravel / ride.platformTravel).toBeCloseTo(1, 1)
+  // He keeps his place on the deck: whatever gap he landed with, he still has.
+  expect(Math.abs(ride.gapAtEnd - ride.gapAtStart)).toBeLessThan(3)
+
+  expect(consoleErrors).toEqual([])
+})
+
+/**
+ * The same question for the lift, which is the harder half.
+ *
+ * Going up, Arcade has to push him up as the platform arrives under his feet.
+ * Coming down, he has to fall with it and STAY in contact. If he doesn't, he
+ * bounces down the sky in little hops, thudding all the way.
+ *
+ * What it counts is the share of frames his feet are on something, rather than
+ * the number of times he lands. Landings looked like the obvious measure and
+ * are the wrong one: a machine busy enough to drop a frame gives him one long
+ * fall, and `player.bounce` turns a long fall into a real bounce — on any
+ * platform, moving or not. That made the count jump from 1 to 8 on a loaded
+ * laptop while the ride itself was perfect. Contact tells the two apart: a
+ * dropped frame costs a couple of frames of it, and genuine bouncing costs
+ * half of them.
+ *
+ * It watches for longer than the lift's trip on purpose, so the turnaround at
+ * the top — the moment rising becomes falling — happens inside the test.
+ */
+test('a lift carries a player up and down without bouncing him', async ({ page }) => {
+  const consoleErrors = watchForErrors(page)
+
+  await page.goto('/')
+  await waitForGameScene(page)
+  await goToLevel(page, 2)
+
+  const ride = await page.evaluate(async () => {
+    const scene = window.__GAME__?.scene.getScene('Game') as unknown as GameProbe
+    const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve(null)))
+    // The second mover in level 3 is the lift up the right-hand side.
+    const lift = scene.movingPlatforms[1] as GameProbe['movingPlatforms'][1]
+
+    scene.player.setVelocity(0, 0)
+    scene.player.setPosition(lift.sprite.x, lift.sprite.y - 40)
+    for (let i = 0; i < 30; i += 1) await nextFrame()
+
+    const gapAtStart = scene.player.y - lift.sprite.y
+    let worstGap = 0
+    let framesOnTheDeck = 0
+    let platformTravel = 0
+    let playerTravel = 0
+    let lastPlatform = lift.sprite.y
+    let lastPlayer = scene.player.y
+
+    const frames = 260
+    for (let i = 0; i < frames; i += 1) {
+      await nextFrame()
+      platformTravel += Math.abs(lift.sprite.y - lastPlatform)
+      playerTravel += Math.abs(scene.player.y - lastPlayer)
+      lastPlatform = lift.sprite.y
+      lastPlayer = scene.player.y
+      worstGap = Math.max(worstGap, Math.abs(scene.player.y - lift.sprite.y - gapAtStart))
+      if (scene.player.body.blocked.down) framesOnTheDeck += 1
+    }
+
+    return { platformTravel, playerTravel, worstGap, framesOnTheDeck, frames }
+  })
+
+  expect(ride.platformTravel).toBeGreaterThan(50)
+  expect(ride.playerTravel / ride.platformTravel).toBeCloseTo(1, 1)
+  // He stays on the deck rather than drifting up off it or sinking into it.
+  expect(ride.worstGap).toBeLessThan(8)
+  // Standing on it, not bouncing down it.
+  expect(ride.framesOnTheDeck / ride.frames).toBeGreaterThan(0.85)
+
+  expect(consoleErrors).toEqual([])
+})
+
 declare global {
   interface Window {
     /** Notes the browser was asked to play, counted by the audio test above. */
@@ -310,6 +467,7 @@ async function levelState(page: import('@playwright/test').Page) {
       hud: scene.hud.text,
       banner: scene.banner.text,
       platforms: scene.level.platforms.length,
+      movingPlatforms: scene.movingPlatforms.length,
       coinsInLevel: scene.level.coins.length,
       coinsAlive: scene.coins.getChildren().filter((coin) => coin.active).length,
       jumpsUsed: scene.jumpState.jumpsUsed,

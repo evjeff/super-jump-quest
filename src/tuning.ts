@@ -46,6 +46,21 @@ export const TUNING = {
     landingSquashMs: 160,
   },
 
+  platforms: {
+    /**
+     * How fast the moving platforms in level 3 go — all of them at once.
+     *
+     * 1 is normal. 0.5 is half speed, which makes level 3 much kinder. 2 is
+     * twice as fast. 0 freezes every moving platform where it starts, which
+     * turns level 3 into an ordinary level.
+     *
+     * How far each one travels, and how long its own trip takes, is in
+     * `src/levels/level3.ts` — that's the level's DESIGN. This knob is for
+     * "that's too hard for me today" without opening a level file.
+     */
+    movingSpeed: 1,
+  },
+
   coins: {
     /** Points per coin. */
     value: 10,
@@ -129,6 +144,14 @@ export const TUNING = {
     sky: 0x1e2749,
     player: 0xffd166,
     platform: 0x3d5a80,
+
+    /**
+     * The platforms that MOVE. Deliberately a different color from the ones
+     * that don't: you should be able to tell which ledges slide from across
+     * the screen, before you trust one with a jump.
+     */
+    movingPlatform: 0x7b5ea7,
+
     coin: 0xf4a261,
     text: '#e8e8f0',
 

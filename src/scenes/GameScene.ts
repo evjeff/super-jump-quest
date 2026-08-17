@@ -4,6 +4,7 @@ import { createBeeper, webAudioOutput } from '../audio/beeper'
 import type { JumpState } from '../game/jump'
 import { canJump, createJumpState, justLanded, registerJump, syncGrounded } from '../game/jump'
 import { facingDirection, horizontalVelocity } from '../game/movement'
+import { platformPosition } from '../game/movingPlatform'
 import type { ControlHint, Progress } from '../game/progress'
 import { afterLevel, bannerText } from '../game/progress'
 import type { ScoreState } from '../game/score'
@@ -13,7 +14,7 @@ import { squashScale } from '../game/squash'
 import type { BestTimes } from '../game/timer'
 import { bestTimeFor, finishBannerLines, formatTime, recordTime } from '../game/timer'
 import type { TouchControlId } from '../game/touchControls'
-import type { Level } from '../levels'
+import type { Level, Platform } from '../levels'
 import { LEVELS } from '../levels'
 import { loadBestTimes, saveBestTimes } from '../storage/bestTimes'
 import { TUNING } from '../tuning'
@@ -29,6 +30,11 @@ export class GameScene extends Phaser.Scene {
   private player!: Phaser.Physics.Arcade.Sprite
   private playerSkin!: Phaser.GameObjects.Image
   private coins!: Phaser.Physics.Arcade.Group
+  /**
+   * The platforms that move, each paired with the level data it came from —
+   * that data is what says where it should be at any given moment.
+   */
+  private movingPlatforms: { sprite: Phaser.Physics.Arcade.Sprite; spec: Platform }[] = []
   private hud!: Phaser.GameObjects.Text
   private banner!: Phaser.GameObjects.Text
 
@@ -137,6 +143,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.advanceTimer(delta)
+    this.movePlatforms()
     this.handleMovement()
     this.handleJumping()
     this.handleFalling()
@@ -184,13 +191,52 @@ export class GameScene extends Phaser.Scene {
 
   private buildPlatforms(): void {
     const platforms = this.physics.add.staticGroup()
+    // Moving platforms can't live in the static group — "static" is Arcade's
+    // word for "this never moves", and it bakes the collision box in place.
+    // They get their own group: immovable, so standing on one (or shoving it)
+    // can't knock it off course, and weightless, so it doesn't fall out of the
+    // sky the moment the level starts.
+    //
+    // `frictionX: 1` is the line that makes riding one work, and it is not
+    // optional. Arcade carries a player standing on a moving platform by
+    // adding `how far the platform moved × its friction.x` to him. A body's own
+    // default for that is 1 — but a physics GROUP quietly sets it to 0 on every
+    // body it makes, so without this the ferry slides out from under his feet
+    // and he stands there in mid-air.
+    const movers = this.physics.add.group({
+      allowGravity: false,
+      immovable: true,
+      frictionX: 1,
+    })
+    this.movingPlatforms = []
+
     for (const spec of this.level.platforms) {
-      const block = platforms.create(spec.x, spec.y, 'platform') as Phaser.Physics.Arcade.Sprite
-      block.setDisplaySize(spec.width, spec.height)
-      block.refreshBody()
+      if (spec.moves) {
+        const block = movers.create(
+          spec.x,
+          spec.y,
+          'movingPlatform',
+        ) as Phaser.Physics.Arcade.Sprite
+        block.setDisplaySize(spec.width, spec.height)
+        // We put this one where it belongs ourselves, every frame, out of the
+        // level clock. `directControl` is how you tell Arcade that: it works
+        // out how fast the platform is going from how far it moved since the
+        // last frame, instead of the other way round. Without it, a platform
+        // that is simply placed somewhere new looks stationary to the physics,
+        // and a stationary platform carries nobody.
+        const body = block.body as Phaser.Physics.Arcade.Body
+        body.directControl = true
+        this.movingPlatforms.push({ sprite: block, spec })
+      } else {
+        const block = platforms.create(spec.x, spec.y, 'platform') as Phaser.Physics.Arcade.Sprite
+        block.setDisplaySize(spec.width, spec.height)
+        block.refreshBody()
+      }
     }
-    // Stored on the scene only long enough to wire the collider in buildPlayer.
+
+    // Stored on the scene only long enough to wire the colliders in buildPlayer.
     this.data.set('platforms', platforms)
+    this.data.set('movers', movers)
   }
 
   private buildPlayer(): void {
@@ -214,6 +260,14 @@ export class GameScene extends Phaser.Scene {
 
     const platforms = this.data.get('platforms') as Phaser.Physics.Arcade.StaticGroup
     this.physics.add.collider(this.player, platforms)
+
+    // The same collider against the ones that move — and this one does more
+    // than stop him falling through. When Arcade settles him onto the top of a
+    // moving platform it also slides him along with it, using the platform's
+    // own `friction.x` (which is 1 by default). That is the whole ride: we do
+    // not carry him ourselves, and doing it as well would carry him twice.
+    const movers = this.data.get('movers') as Phaser.Physics.Arcade.Group
+    this.physics.add.collider(this.player, movers)
   }
 
   private buildCoins(): void {
@@ -281,6 +335,27 @@ export class GameScene extends Phaser.Scene {
   private advanceTimer(delta: number): void {
     this.levelTimeMs += delta
     if (formatTime(this.levelTimeMs) !== this.shownTime) this.refreshHud()
+  }
+
+  /**
+   * Put every moving platform where the level clock says it should be.
+   *
+   * Where a platform is depends only on how long this level has been running,
+   * so it is in the same place at the same second on a slow phone and a fast
+   * laptop — which matters, because the game writes down your best time.
+   *
+   * It runs straight after the clock is advanced, and only while he's playing:
+   * the clock stops when the finish banner goes up, so the platforms stop too.
+   */
+  private movePlatforms(): void {
+    // Scaling the clock rather than the distances is what makes
+    // `movingSpeed: 0` freeze everything instead of dividing by nothing.
+    const elapsed = this.levelTimeMs * TUNING.platforms.movingSpeed
+
+    for (const { sprite, spec } of this.movingPlatforms) {
+      const { x, y } = platformPosition(spec, elapsed)
+      sprite.setPosition(x, y)
+    }
   }
 
   private handleMovement(): void {

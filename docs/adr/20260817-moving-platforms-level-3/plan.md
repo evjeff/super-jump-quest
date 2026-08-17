@@ -2,9 +2,9 @@
 
 ## Current Status
 
-- **State:** `[DRAFT]`
+- **State:** `[COMPLETE]`
 - **Last updated:** 2026-08-17
-- **Next action:** Work `tasks.md` top to bottom.
+- **Next action:** Built. See `tasks.md` for what changed along the way.
 
 Read `spec.md` first for what is being built and why.
 
@@ -97,12 +97,17 @@ player has been separated onto the platform's top, it runs:
 body1.x += body1Distance * body1.friction.x   // node_modules/phaser/src/physics/arcade/ProcessY.js
 ```
 
-and `friction.x` defaults to `1` on every body. So a player standing on a
-sliding ferry is moved with it, by the engine, for free — and the same code path
-uses `autoFrame` rather than `prev` when `directControl` is on, which is the
-other reason to use it. Up-and-down is handled by ordinary separation: a rising
-platform pushes the resting player up, and on a falling one gravity keeps him in
-contact.
+— and the same code path uses `autoFrame` rather than `prev` when
+`directControl` is on, which is the other reason to use it. Up-and-down is
+handled by ordinary separation: a rising platform pushes the resting player up,
+and on a falling one gravity keeps him in contact.
+
+**But `frictionX: 1` has to be asked for.** A Body's own default is `1`, so
+`Body.js` reads as though riding works out of the box. These platforms come from
+a physics **group**, and `PhysicsGroup.js` defaults `frictionX` to `0` and
+stamps it onto every body it makes. Miss it and the ferry slides out from under
+his feet while he stands in mid-air, with every other part of the physics
+correct.
 
 This is worth stating plainly because the obvious hand-written version — adding
 the platform's speed to the player's own each frame — would **double** the
