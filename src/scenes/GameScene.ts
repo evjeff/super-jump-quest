@@ -11,6 +11,7 @@ import type { ScoreState } from '../game/score'
 import { collectCoin, createScoreState, formatScore, isLevelComplete } from '../game/score'
 import { coinSound, isDistinctLanding, jumpSound, landingSound, winSound } from '../game/sounds'
 import { squashScale } from '../game/squash'
+import { makeStarfield } from '../game/starfield'
 import type { BestTimes } from '../game/timer'
 import { bestTimeFor, finishBannerLines, formatTime, recordTime } from '../game/timer'
 import type { TouchControlId } from '../game/touchControls'
@@ -114,6 +115,7 @@ export class GameScene extends Phaser.Scene {
     // Negative depth is what keeps it behind: platforms, coins, Pip and the
     // HUD are all at 0 and are drawn in the order they're added.
     this.add.image(0, 0, 'sky').setOrigin(0, 0).setDepth(-10)
+    this.buildTwinklingStars()
 
     // Wipe the last level's state FIRST, so everything below is built from a
     // clean slate. (The HUD in particular is drawn straight from the score, and
@@ -218,6 +220,39 @@ export class GameScene extends Phaser.Scene {
   }
 
   // --- setup -------------------------------------------------------------
+
+  /**
+   * The few stars that fade in and out. The rest of the sky is already painted
+   * into the picture behind them; these are the only ones that are real
+   * objects, because they're the only ones that have to change.
+   *
+   * They sit at depth -9: in front of the sky, behind everything you play with.
+   * `stars.twinkleEvery` at 0 in `tuning.ts` means this loop finds nothing to
+   * do and the sky goes completely still.
+   */
+  private buildTwinklingStars(): void {
+    const { width, height } = TUNING.world
+
+    for (const star of makeStarfield({ width, height, ...TUNING.stars })) {
+      if (!star.twinkles) continue
+
+      const dot = this.add
+        .rectangle(star.x, star.y, star.size, star.size, TUNING.colors.night.star)
+        .setDepth(-9)
+
+      // Back and forth forever. The staggered delay is what stops them all
+      // blinking in time with each other, which would look like a machine.
+      this.tweens.add({
+        targets: dot,
+        alpha: TUNING.stars.dimmest,
+        duration: star.durationMs,
+        delay: star.delayMs,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      })
+    }
+  }
 
   private buildPlatforms(): void {
     const platforms = this.physics.add.staticGroup()

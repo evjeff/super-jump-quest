@@ -58,6 +58,12 @@ _(nothing yet — pick something from below)_
   stops the moment you grab the last coin, and the game remembers your fastest
   finish on each level even after you close the tab, so there's always a time
   to beat and a big "NEW BEST TIME!" when you beat it
+- **Stars that twinkle.** About one star in five now fades slowly in and out,
+  each on its own timing so they never blink together. The rest of the sky is
+  still one painted picture, so this costs almost nothing while you play.
+  `stars.twinkleEvery` in `src/tuning.ts` decides how many twinkle (`1` = all of
+  them, `0` = back to a still sky), `stars.twinkleMs` how slow the fade is, and
+  `stars.dimmest` how faint they get
 
 ## 📋 Next up
 
@@ -65,8 +71,6 @@ _Good starting points — each is small enough to finish in one sitting._
 
 - [ ] A mute key, so the game can be played at bedtime
       (for now: set `sound.volume` to `0` in `src/tuning.ts`)
-- [ ] Stars that twinkle. The sky is one still picture at the moment, so the
-      stars just sit there
 
 ## 🌟 Someday / bigger
 
