@@ -21,3 +21,6 @@ Thumbs.db
 *.log
 npm-debug.log*
 pnpm-debug.log*
+
+# Claude Code scratch worktrees (agent-local, never committed)
+.claude/worktrees/
