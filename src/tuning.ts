@@ -139,6 +139,30 @@ export const TUNING = {
     deathDepth: 700,
   },
 
+  /** The stars in the night sky. Their colour is `colors.night.star`. */
+  stars: {
+    /** How many there are. Try 400 for a really busy sky. */
+    count: 110,
+
+    /**
+     * One star in every this many twinkles; the rest sit perfectly still.
+     *
+     * 5 means about a fifth of them are twinkling at any time, which is enough
+     * to make the sky feel alive without it looking like a fairground. 1 makes
+     * every single one twinkle. 0 stops the twinkling completely.
+     *
+     * The still ones are painted into the sky picture and cost nothing, so this
+     * is really "how much work is the sky allowed to do while you play".
+     */
+    twinkleEvery: 5,
+
+    /** How long one fade takes, in milliseconds. Bigger = slower, dreamier. */
+    twinkleMs: 1200,
+
+    /** How faint a star gets at its dimmest. 0 = winks right out, 1 = no twinkle. */
+    dimmest: 0.2,
+  },
+
   /** Colors are hex numbers: 0xRRGGBB. Pick new ones at https://htmlcolorcodes.com */
   colors: {
     /**

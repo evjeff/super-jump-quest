@@ -1,12 +1,10 @@
 import Phaser from 'phaser'
 import { PIP_HEIGHT, PIP_KEYS, PIP_ROWS, PIP_WIDTH } from '../game/pipSprite'
+import { makeStarfield } from '../game/starfield'
 import { TUNING } from '../tuning'
 
 /** How many screen pixels one square of Pip is. 16 x 24 squares x 2 = 32 x 48. */
 const PIP_PIXEL = 2
-
-/** How many stars are scattered across the sky. */
-const STAR_COUNT = 110
 
 /** How many faint circles the moon's halo is built from. More = smoother. */
 const MOON_HALO_RINGS = 34
@@ -21,8 +19,9 @@ const MOON_HALO_RINGS = 34
  *
  * Everything here runs ONCE, before the game starts, and gets baked into a
  * texture. That's what keeps a detailed sky affordable: however many stars and
- * hills go into it, playing costs the same as it did when the sky was one flat
- * colour — a single picture on the screen.
+ * hills go into it, playing costs one picture on the screen. The only part that
+ * does any work while you play is the handful of twinkling stars, which
+ * `GameScene` adds on top — see `stars.twinkleEvery` in `tuning.ts`.
  */
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -88,14 +87,14 @@ export class BootScene extends Phaser.Scene {
     graphics.fillGradientStyle(middle, middle, horizon, horizon, 1)
     graphics.fillRect(0, height / 2, width, height / 2)
 
+    // Only the stars that sit still get painted in. The twinkling ones are
+    // left out on purpose and GameScene puts them back as real objects it can
+    // fade in and out — painting them here too would leave a bright dot
+    // underneath that never dims.
     graphics.fillStyle(star, 1)
-    const nextNumber = seededNumbers(7)
-    for (let i = 0; i < STAR_COUNT; i++) {
-      const x = nextNumber() * width
-      // Only in the top three-quarters — the bottom is where the hills go.
-      const y = nextNumber() * height * 0.72
-      const size = nextNumber() < 0.75 ? 1 : 2
-      graphics.fillRect(Math.round(x), Math.round(y), size, size)
+    for (const { x, y, size, twinkles } of makeStarfield({ width, height, ...TUNING.stars })) {
+      if (twinkles) continue
+      graphics.fillRect(x, y, size, size)
     }
 
     const moonX = width * 0.79
@@ -166,17 +165,5 @@ export class BootScene extends Phaser.Scene {
     graphics.fillCircle(radius, radius, radius)
     graphics.generateTexture(key, size, size)
     graphics.destroy()
-  }
-}
-
-/**
- * Numbers between 0 and 1 that look scattered but are the same every time.
- * Used for the stars, so the sky is identical on every run.
- */
-function seededNumbers(seed: number): () => number {
-  let value = seed >>> 0
-  return () => {
-    value = (value * 1664525 + 1013904223) >>> 0
-    return value / 4294967296
   }
 }
