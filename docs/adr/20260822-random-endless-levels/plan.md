@@ -4,10 +4,11 @@
 
 - **State:** `[IN PROGRESS]`
 - **Last updated:** 2026-08-22
-- **Done:** build order step 1. `src/game/reach.ts` + `reach.test.ts` exist and
-  pass, pinned to the numbers in `level3.ts`'s comment.
-- **Next action:** Step 2, `levelMeasure.ts`, and re-pin §4.2's table with it —
-  see the note in that section about the numbers moving.
+- **Done:** build order steps 1 and 2. `src/game/reach.ts` and
+  `src/game/levelMeasure.ts` exist with their tests, and §4.2's table below is
+  now what the shipped code measures rather than what a scratch script guessed.
+- **Next action:** Step 3, `levelCheck.ts`, `broken` rules only, run against
+  levels 1–3.
 
 Read `README.md` for the decisions and `spec.md` for what is being built.
 
@@ -102,19 +103,19 @@ first draft of this plan said only the last:
 
 ### 4.2 The measurement, and the surprise in it
 
-`measure()` was run over the three hand-made levels: bottleneck-shortest-path
-from the player's start to every coin, where a moving platform's *swept* span
-counts as somewhere to stand (that is what riding is), and every hop is priced
-as a share of the three-jump envelope.
+`measureLevel()` was run over the three hand-made levels: bottleneck-shortest-
+path from the player's start to every coin, where a moving platform's *swept*
+span counts as somewhere to stand (that is what riding is), and every hop is
+priced as a share of the three-jump envelope.
 
 | | level 1 | level 2 | level 3 |
 |---|---|---|---|
-| floor solid | 1.00 | 0.62 | 0.48 |
+| floor solid | 1.00 | 0.63 | 0.48 |
 | gaps | — | one, 360 wide, bridged by a ledge | one, 500 wide, ferry only |
 | ledges (narrowest) | 5 (140) | 6 (130) | 5 (120) |
 | moving platforms | 0 | 0 | 3 |
 | coins | 7 | 11 | 13 |
-| hops to the furthest coin | 3 | 5 | 3 |
+| hops to the furthest coin | 5 | 8 | 6 |
 | **hardest hop on the route** | **0.36** | **0.32** | **0.24** |
 
 The last row is the surprise, and it rewrites the dial table that was here
@@ -133,13 +134,29 @@ platforming. It would have passed every reachability test and been miserable to
 play. That is precisely the "finishable but boring" risk in `spec.md`, and it
 would have arrived at level 4.
 
-> **These numbers are due one correction.** They came from a scratch script
-> written to settle the argument, and its hop pricing did not credit a hop that
-> *drops* with the extra time falling buys. `hopCost` in the shipped
-> `src/game/reach.ts` does. So the three costs above can only move **down** when
-> step 2 re-measures them with the real code, and the argument they support —
-> that distance is not what makes these levels hard — only gets stronger. The
-> table is re-pinned by a test in step 2 rather than left as prose.
+> **Re-measured with the shipped code, and the argument survives.** The table
+> above is now what `measureLevel` returns, pinned by `levelMeasure.test.ts`
+> rather than left as prose. The correction that was owed — the scratch script
+> did not credit a hop that *drops* with the extra time falling buys, and
+> `hopCost` does — moved the costs down as predicted, but not far enough to
+> change a single figure at two decimal places: **0.355, 0.316 and 0.243**. The
+> biggest single move was level 2's sky coin, 0.32 → 0.316, which is the hop
+> that drops.
+>
+> The row that really moved is **hops to the furthest coin**, 3/5/3 → 5/8/6,
+> because the tape measure counts hops differently from the scratch script: it
+> counts the drop off the spot he starts in and the final hop onto the coin, and
+> it takes the *kindest* route rather than the shortest — in level 1 the way up
+> to the reward ledge is four easy hops round the stepping stones, not one lunge
+> that costs four fifths of everything he has.
+>
+> Three numbers in §4.4's L1–L3 columns are still the scratch script's and are
+> due the same treatment when those endpoints are next touched. Measured, they
+> are: **route depth** 5/8/6 (above), **forced rides** 0/0/**10** of 13 — every
+> coin level 3 gives you off a moving deck, not the six that are only over one —
+> and **fall cost** 0/3/3 hops. Level 3's three boarding windows come out at
+> **2.3 s, 4.9 s and 4.0 s** of their six- and seven-second trips, every one of
+> them a one-jump board, which is the calibration T1 wanted.
 
 Two honest caveats about the measurement:
 
