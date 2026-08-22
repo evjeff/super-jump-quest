@@ -12,7 +12,13 @@ small thing beats three half-built big things.
 
 ## 🔨 Building right now
 
-_(nothing yet — pick something from below)_
+- **Levels that never run out.** Levels 1–3 stay exactly as they are; after
+  them the game makes its own levels, forever, each one a bit harder than the
+  last — less ground at the bottom, more coins, more sliding platforms, tighter
+  jumps. Level 7 is always the same level 7, so best times still mean
+  something. Plus a button to play a level again and a button to skip one.
+  **Designed, not built yet** — see
+  [`docs/adr/20260822-random-endless-levels/`](docs/adr/20260822-random-endless-levels/README.md).
 
 ## ✅ Done
 
