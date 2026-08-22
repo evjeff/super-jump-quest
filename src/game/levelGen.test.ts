@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import type { Level } from '../levels'
+import type { Level, Platform } from '../levels'
 import { TUNING } from '../tuning'
 import { CHECKS, checkLevel, type Finding } from './levelCheck'
 import { difficultyFor, draftLevel, type GenerateOptions, generateLevel } from './levelGen'
-import { measureLevel } from './levelMeasure'
+import { measureLevel, standingArea } from './levelMeasure'
 import { touchButtonLayout } from './touchControls'
 
 /**
@@ -19,6 +19,7 @@ const OPTIONS: GenerateOptions = {
   movingSpeed: TUNING.platforms.movingSpeed,
   deathDepth: TUNING.world.deathDepth,
   playerWidth: 32,
+  playerHeight: 48,
   touchButtons: touchButtonLayout({
     width: TUNING.world.width,
     height: TUNING.world.height,
@@ -51,6 +52,65 @@ const brokenIn = (level: Level, options: GenerateOptions = OPTIONS): Finding[] =
   checkLevel(level, options).filter((finding) => finding.severity === 'broken')
 
 const measured = (level: Level) => measureLevel(level, OPTIONS)
+
+/** Everywhere a ledge ever gets to, and how tall it is, as one rectangle. */
+const spaceTakenBy = (platform: Platform, options: GenerateOptions) => {
+  const deck = standingArea(platform, options.movingSpeed)
+  return {
+    left: deck.left,
+    right: deck.right,
+    top: deck.highest,
+    bottom: deck.lowest + platform.height,
+  }
+}
+
+/**
+ * Ledges with a ceiling lower than Pip is tall over them.
+ *
+ * A deck with less than 48 pixels of air above it is not somewhere to stand,
+ * it is a shelf he cannot get into — so it is decoration at best, and at worst
+ * it is the only way up to a coin and the level quietly stops there.
+ */
+const noRoomToStandOn = (level: Level, options: GenerateOptions) => {
+  const boxes = level.platforms.map((platform) => spaceTakenBy(platform, options))
+  const complaints: string[] = []
+
+  for (const [index, deck] of boxes.entries()) {
+    for (const [other, above] of boxes.entries()) {
+      if (index === other) continue
+      if (above.right <= deck.left || above.left >= deck.right) continue
+      if (above.bottom > deck.top) continue
+      const room = deck.top - above.bottom
+      if (room >= options.playerHeight) continue
+      complaints.push(
+        `the ledge at ${deck.left}, ${deck.top} has only ${Math.round(room)} above it`,
+      )
+    }
+  }
+
+  return complaints
+}
+
+/** Ledges standing in the space Pip's own body fills as the level opens. */
+const standingInsideHim = (level: Level, options: GenerateOptions) => {
+  const him = {
+    left: level.playerStart.x - options.playerWidth / 2,
+    right: level.playerStart.x + options.playerWidth / 2,
+    top: level.playerStart.y - options.playerHeight / 2,
+    bottom: level.playerStart.y + options.playerHeight / 2,
+  }
+
+  return level.platforms
+    .map((platform) => spaceTakenBy(platform, options))
+    .filter(
+      (box) =>
+        box.left < him.right &&
+        box.right > him.left &&
+        box.top < him.bottom &&
+        box.bottom > him.top,
+    )
+    .map((box) => `a ledge fills ${box.left}, ${box.top} where he is standing`)
+}
 
 /** The average of a list, for the "does this dial actually move" questions. */
 const mean = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length
@@ -107,6 +167,40 @@ describe('every level from 4 to 200 is one somebody can finish', () => {
 
   it('can get every single coin in every single level', () => {
     for (const level of PLAYED) expect(measured(level).everyCoinReachable).toBe(true)
+  })
+
+  /**
+   * He drops into the level at a spot, and that spot has to be empty air.
+   * Put a ledge where his body already is and the game shoves him out of it on
+   * the very first frame — he pops sideways or upward before anybody has
+   * touched a key, which looks exactly like a bug because it is one.
+   */
+  it('never stands a ledge in the space he opens the level in', () => {
+    const complaints = NUMBERS.flatMap((number, index) => [
+      ...standingInsideHim(PLAYED[index] as Level, OPTIONS).map(
+        (said) => `level ${number}: ${said}`,
+      ),
+      ...standingInsideHim(FIRST_DRAFTS[index]?.level as Level, OPTIONS).map(
+        (said) => `level ${number}, first draft: ${said}`,
+      ),
+    ])
+    expect(complaints).toEqual([])
+  })
+
+  /**
+   * Pip is 48 tall, so a ledge with 40 pixels of air over it is a shelf, not a
+   * platform. He cannot get into the gap, which makes the ledge a lie — and
+   * when it is the only way up to a coin, the level stops there without ever
+   * looking broken.
+   */
+  it('leaves him room to stand up on every ledge it builds', () => {
+    const complaints = NUMBERS.flatMap((number, index) => [
+      ...noRoomToStandOn(PLAYED[index] as Level, OPTIONS).map((said) => `level ${number}: ${said}`),
+      ...noRoomToStandOn(FIRST_DRAFTS[index]?.level as Level, OPTIONS).map(
+        (said) => `level ${number}, first draft: ${said}`,
+      ),
+    ])
+    expect(complaints).toEqual([])
   })
 
   it('never asks for a harder jump than the level said it would', () => {
@@ -281,6 +375,36 @@ describe('the levels are built out of what tuning.ts says he can do', () => {
     for (const number of NUMBERS) {
       expect(brokenIn(generateLevel(number, frozen), frozen)).toEqual([])
     }
+  })
+
+  /**
+   * A feeble jump and heavy gravity at the same time: he barely gets off the
+   * floor and comes down like a brick. This is the pair of knobs that used to
+   * stack the ledges 40 apart — closer together than Pip is tall — so half the
+   * level was shelves he could not climb into and the coins up there were gone.
+   */
+  it('still leaves him room to stand when the jump is feeble and gravity is heavy', () => {
+    const leaden: GenerateOptions = {
+      ...OPTIONS,
+      physics: { ...TUNING.player, jumpVelocity: 400, gravity: 2400 },
+    }
+    for (const number of sample) {
+      const level = generateLevel(number, leaden)
+      expect(noRoomToStandOn(level, leaden)).toEqual([])
+      expect(standingInsideHim(level, leaden)).toEqual([])
+      expect(brokenIn(level, leaden)).toEqual([])
+    }
+  })
+
+  /**
+   * A hole sized to exactly two one-jump reaches with a bridge in the middle
+   * of it, and then the bridge nudged eight pixels sideways: the far bank went
+   * out of reach and every one of the twelve tries came back with a hole
+   * nothing crosses. This is that level.
+   */
+  it('leaves a bridge you can get on to from both banks, even at full stretch', () => {
+    const frozenElsewhere: GenerateOptions = { ...OPTIONS, movingSpeed: 0, worldSeed: 2 }
+    expect(brokenIn(generateLevel(1765, frozenElsewhere), frozenElsewhere)).toEqual([])
   })
 
   it('still breaks no never-ship rule when he is floaty and slow', () => {

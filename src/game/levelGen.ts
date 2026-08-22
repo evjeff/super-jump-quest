@@ -54,6 +54,15 @@ export interface GenerateOptions extends CheckContext {
    */
   worldSeed: number
 
+  /**
+   * How tall Pip is on the screen. 48 today.
+   *
+   * The builder has to know, because a ledge with less than his own height of
+   * air above it is not somewhere to stand — it is a shelf he cannot get into,
+   * and a coin up there is a coin nobody ever has.
+   */
+  playerHeight: number
+
   /** How fast the ladder gets mean. Bigger = a gentler climb. */
   ramp?: number
 }
@@ -185,10 +194,7 @@ const MIN_HOLE = 120
 /** Nothing goes above this, so there is always room for a coin over it. */
 const SKY_MARGIN = 70
 
-/** How far a ledge keeps clear of the floor, so the two do not look welded. */
-const FLOOR_CLEARANCE = 30
-
-/** Breathing room between any two platforms. */
+/** Breathing room to the side of any two platforms. */
 const ELBOW_ROOM = 14
 
 /** How close to the edge of the screen anything is allowed to get. */
@@ -221,6 +227,17 @@ const TRIP_SECONDS = { least: 1.5, most: 8 }
  * it just means waiting for it to come round again.
  */
 const WINDOW = { crossing: 1.6, least: 0.6 }
+
+/**
+ * How far a bridge is nudged off the middle of its hole, so it is not always
+ * dead centre.
+ *
+ * The nudge has to be PAID FOR when the hole is measured, not spent afterwards:
+ * a hole sized to exactly two one-jump reaches with a bridge in the middle has
+ * no slack in it at all, and nudging the bridge eight pixels then puts the far
+ * bank out of reach and stops the level.
+ */
+const BRIDGE_NUDGE = 8
 
 /** How far past the end of the ground a ferry parks. Level 3's parks five past. */
 const FERRY_NUDGE = 5
@@ -586,7 +603,9 @@ function planTheFloor(
 
   // Can this level make a ferry at all? With a jump this feeble there is no
   // height to park a deck at, and with every ferry frozen there is no ferry.
-  const ferryable = ferries > 0 && ferryRise(dials, options) >= LEDGE_HEIGHT + ELBOW_ROOM
+  // A deck rides out over the far bank at the end of its trip, so it has to
+  // ride high enough that the ground under it is still somewhere to stand.
+  const ferryable = ferries > 0 && ferryRise(dials, options) >= LEDGE_HEIGHT + options.playerHeight
 
   // The widest one hole is allowed to be: a ferry crosses almost anything, a
   // bridge only reaches so far, and without either it has to be jumped.
@@ -652,9 +671,16 @@ function planTheFloor(
   return { pieces, holes }
 }
 
-/** How wide a hole one still ledge standing in it can bridge. */
+/**
+ * How wide a hole one still ledge standing in it can bridge.
+ *
+ * The nudge the bridge gets, and the pixel everything is rounded to, are both
+ * taken off before the sum: a hole measured to the very last pixel of a jump
+ * has nowhere to put them, and the bridge ends up a stride further from the far
+ * bank than anybody can jump.
+ */
 function bridgeSpan(dials: Dials, options: GenerateOptions): number {
-  const side = bridgeSide(dials, options)
+  const side = bridgeSide(dials, options) - BRIDGE_NUDGE - 1
   return side <= ELBOW_ROOM ? 0 : 2 * side + bridgeWidth(dials)
 }
 
@@ -690,16 +716,32 @@ function bridgeSide(dials: Dials, options: GenerateOptions): number {
   )
 }
 
-/** A ledge standing in the middle of a hole, so the hole has a middle. */
+/**
+ * A ledge standing in the middle of a hole, so the hole has a middle.
+ *
+ * It is nudged off centre so that no two bridges look stamped out of the same
+ * mould — but never so far that one of the banks falls out of reach. Both ends
+ * of a bridge have to be a single jump away, or it is not a way across, it is
+ * an island.
+ */
 function bridgeOver(hole: Hole, dice: Dice, dials: Dials, options: GenerateOptions): Platform {
-  const width = Math.min(bridgeWidth(dials), hole.right - hole.left - 2 * ELBOW_ROOM)
+  const width = Math.round(Math.min(bridgeWidth(dials), hole.right - hole.left - 2 * ELBOW_ROOM))
   const rise = bridgeRise(dials, options)
   const groundTop = options.world.height - GROUND_HEIGHT
+  const side = bridgeSide(dials, options)
+
+  // How far the left edge of the deck may sit from the left bank: near enough
+  // to jump on to from there, far enough that the far bank is still a jump.
+  const nearest = Math.max(hole.left + ELBOW_ROOM, hole.right - width - side)
+  const furthest = Math.max(nearest, Math.min(hole.left + side, hole.right - ELBOW_ROOM - width))
+  const middle = (hole.left + hole.right) / 2 - width / 2
+  const nudged = middle + dice.between(-BRIDGE_NUDGE, BRIDGE_NUDGE)
+  const left = Math.min(furthest, Math.max(nearest, nudged))
 
   return {
-    x: Math.round((hole.left + hole.right) / 2 + dice.between(-8, 8)),
+    x: Math.round(left + width / 2),
     y: Math.round(groundTop - rise + LEDGE_HEIGHT / 2),
-    width: Math.round(width),
+    width,
     height: LEDGE_HEIGHT,
   }
 }
@@ -932,9 +974,11 @@ function nextRung(
   const ceiling = cost * riseFor(options.maxJumps, options.physics)
 
   // The band a ledge is allowed to sit in: never so high there is no room for
-  // a coin over it, never so low it looks welded to the floor.
+  // a coin over it, and never so low that the floor underneath it stops being
+  // somewhere he can stand — a ledge closer to the ground than he is tall is a
+  // ceiling to crawl under, not a step up.
   const groundTop = options.world.height - GROUND_HEIGHT
-  const lowest = groundTop - FLOOR_CLEARANCE - LEDGE_HEIGHT
+  const lowest = groundTop - options.playerHeight - LEDGE_HEIGHT
 
   for (let go = 0; go < TRIES; go++) {
     const shrink = 1 - go / TRIES
@@ -956,7 +1000,7 @@ function nextRung(
     // How far sideways that leaves him, and where along the screen it can go.
     const reach = acrossFor(Math.max(0, climb), options.maxJumps, cost, options.physics)
     const spread = Math.max(
-      climb >= LEDGE_HEIGHT + ELBOW_ROOM ? 0 : ELBOW_ROOM * 2,
+      climb >= LEDGE_HEIGHT + options.playerHeight ? 0 : ELBOW_ROOM * 2,
       reach * dice.between(0.4, 1) * shrink,
     )
 
@@ -1005,8 +1049,49 @@ function nextRung(
 function thereIsRoom(box: Box, placed: Platform[], options: GenerateOptions): boolean {
   if (box.left < SCREEN_MARGIN || box.right > options.world.width - SCREEN_MARGIN) return false
   if (options.touchButtons.some((button) => hiddenUnder(box, button))) return false
+  if (overlaps(box, whereHeStarts(options))) return false
 
-  return !placed.some((platform) => overlaps(grown(box, ELBOW_ROOM), sweptBoxOf(platform, options)))
+  const mine = standingRoom(box, options, ELBOW_ROOM)
+  return !placed.some((platform) =>
+    overlaps(mine, standingRoom(sweptBoxOf(platform, options), options, 0)),
+  )
+}
+
+/**
+ * A ledge, plus the air a player needs above it to be standing on it.
+ *
+ * This is the difference between a platform and a shelf. Pip is 48 tall, so a
+ * deck with 40 pixels of ceiling over it is somewhere he can never get into:
+ * it looks like a ledge, it draws like a ledge, and it is scenery. Ask for the
+ * air as well as the ledge and two ledges can never end up stacked that close.
+ *
+ * `elbows` is the sideways breathing room, and only the thing being placed asks
+ * for it — otherwise every gap between two ledges would quietly be twice as
+ * wide as `ELBOW_ROOM` says.
+ */
+function standingRoom(box: Box, options: GenerateOptions, elbows: number): Box {
+  return {
+    left: box.left - elbows,
+    right: box.right + elbows,
+    top: box.top - options.playerHeight,
+    bottom: box.bottom,
+  }
+}
+
+/**
+ * The space Pip's own body fills the instant the level appears.
+ *
+ * Nothing may be built there. Drop a ledge on top of him and the game shoves
+ * him back out of it on the very first frame — he pops sideways or upward
+ * before anybody has touched a key, which looks like a bug because it is one.
+ */
+function whereHeStarts(options: GenerateOptions): Box {
+  return {
+    left: PLAYER_START.x - options.playerWidth / 2,
+    right: PLAYER_START.x + options.playerWidth / 2,
+    top: PLAYER_START.y - options.playerHeight / 2,
+    bottom: PLAYER_START.y + options.playerHeight / 2,
+  }
 }
 
 // ===========================================================

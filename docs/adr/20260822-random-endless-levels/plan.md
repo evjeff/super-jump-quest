@@ -4,11 +4,13 @@
 
 - **State:** `[IN PROGRESS]`
 - **Last updated:** 2026-08-22
-- **Done:** build order steps 1 and 2. `src/game/reach.ts` and
-  `src/game/levelMeasure.ts` exist with their tests, and §4.2's table below is
-  now what the shipped code measures rather than what a scratch script guessed.
-- **Next action:** Step 3, `levelCheck.ts`, `broken` rules only, run against
-  levels 1–3.
+- **Done:** build order steps 1 to 4. `reach.ts`, `levelMeasure.ts`,
+  `levelCheck.ts` and `levelGen.ts` exist with their tests, and §4.2's table
+  below is now what the shipped code measures rather than what a scratch script
+  guessed. Three people then attacked the generator; what they found and what
+  was done about it is at the bottom of §6.
+- **Next action:** Step 5, `levelFor()` and the endless `afterLevel`, so the
+  game really continues past level 3.
 
 Read `README.md` for the decisions and `spec.md` for what is being built.
 
@@ -336,6 +338,15 @@ in `level3.ts` that cost three attempts to earn.
 
 **f. Hang the coins** (L1, T3), then name the level from two short word lists.
 
+Two things nothing may be built in, and both are about the size of a body
+rather than the size of a jump. **Pip is 48 tall, so a deck needs 48 of clear
+air above it** before it counts as somewhere to stand — below that it is a
+shelf he cannot get into, it looks exactly like a ledge, and when it is the
+only way up to a coin the level quietly stops there without ever looking
+broken. And **the spot he drops into has to be empty**: a ledge overlapping his
+body at the start gets him shoved out of it on the first frame, before anybody
+has touched a key.
+
 Output is a plain `Level` — the same object `level1.ts` exports.
 
 ## 6. The checker (`src/game/levelCheck.ts`)
@@ -392,6 +403,60 @@ waits for a real complaint before it costs anyone a re-roll:
   be a mechanic.
 - *too front-loaded* — the last coin two hops from the start and the other
   eighteen crammed in first.
+
+### What three people found when they attacked the generator
+
+Three passes over the finished generator, 2026-08-22: can a child finish it,
+is level 7 really always level 7, and does it look like anything. Everything
+below was reproduced with a script before it was written down.
+
+**Fixed, because the construction was wrong** — a broken candidate should be
+impossible to build, not merely rejected afterwards:
+
+- **A ledge standing in the space he opens the level in**, 54 of levels 4–200.
+  Arcade shoves him out of it on the first frame.
+- **Ledges stacked closer together than Pip is tall.** Harmless at today's
+  numbers; with `jumpVelocity: 400` and `gravity: 2400` set together it walled
+  off half a level and the coins up there with it, and the checker saw nothing
+  wrong. Both fixed by the standing-room rule in §5.
+- **A bridge sized to the very last pixel of two jumps and then nudged eight
+  sideways**, which put the far bank out of reach and made every one of the
+  twelve tries come back broken.
+
+**Left alone, and why.** Each is a judgement call rather than a bug, and each
+would move a number the ADR argues about — so they are written down here rather
+than quietly changed:
+
+- *the same canyon over and over* — 57 of levels 4–200 have `floorSolid` sitting
+  exactly on its 0.30 stop, and at that value the floor has no dice left in it:
+  there is only room for one hole, and it is always 672 wide. Levels 150, 152
+  and 154 share a floor to the pixel. The cause is §4.5's `clamp01`: once
+  `difficulty × weight` passes 1 the dial is pinned on its limit and stops
+  listening to the dice. The honest fix is a softer top end to the budget, which
+  moves every level on the ladder and is worth doing deliberately rather than as
+  a bug fix.
+- *the aim dial under-delivers* — the dials ask a mean 0.49 of the jump and the
+  levels deliver 0.38–0.41. Better than it was (the standing-room rule pushed
+  level 6 "Star Leap" from 0.27 to 0.54), but the route still takes the first
+  hop that fits rather than the hop it was asked for.
+- *the ladder is flattest past level 20* — between levels 21–60 and 121–200 the
+  floor goes .54 → .53, the coins 15.3 → 15.8 and the hardest hop .40 → .41.
+  §4.6 predicts the distance rows flattening; it does not predict the coin count
+  flattening, so an endpoint is probably wrong rather than the model.
+- *a ferry you can board for a blink* — 23 ferries over levels 4–200 give under
+  a second, and 11 take a full sixteen seconds to go there and back. That is the
+  parking spot `level3.ts` threw away. `WINDOW.least` is 0.6 s on purpose for a
+  ferry you can simply wait for again, but `TRIP_SECONDS.most` caps a ONE-WAY
+  trip at 8 s while its comment is talking about a whole trip, and that is the
+  number that wants a second look.
+- *level 4 is not much of a breather* — 19 coins where `spec.md` promised seven
+  or eight, and a ferry. The coin dial's gentle end (8) is not what the budget
+  actually hands level 4.
+- *`generateLevel(Number.POSITIVE_INFINITY)` never returns* — `jobFor` replays
+  the job chain from level 4 every time it is called, so it costs more the
+  higher the level, and asking for level Infinity spins forever. Not reachable
+  from a level counter that only ever goes up by one, and the twelve-attempt
+  loop it looks like is genuinely bounded.
 
 ### Discard and re-roll — bounded, deterministic, never failing
 
