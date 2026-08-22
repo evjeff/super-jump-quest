@@ -231,7 +231,7 @@ test('finishing a level starts the next one, and finishing the last one wins', a
   await collectCoins(page)
   expect(await banner(page)).toContain('YOU WIN!')
 
-  await holdKey(page, 'KeyR')
+  await holdShiftKey(page, 'KeyR')
   await expect.poll(() => hud(page), { timeout: 5_000 }).toContain('LEVEL 1')
   expect(await hud(page)).toContain('SCORE 00000')
 
@@ -293,11 +293,12 @@ test('the game keeps going past level 3, into levels it made up itself', async (
 })
 
 /**
- * The page and the README both promise that R starts over. It has to work while
- * he is still playing, not only on the win screen — being stuck on a hard jump
- * with no way back except reloading the page is how a Saturday morning ends.
+ * The page and the README both promise that SHIFT+R starts over. It has to work
+ * while he is still playing, not only on the win screen — being stuck on a hard
+ * jump with no way back except reloading the page is how a Saturday morning
+ * ends.
  */
-test('R starts the game over in the middle of a level', async ({ page }) => {
+test('SHIFT+R starts the game over in the middle of a level', async ({ page }) => {
   await page.goto('/')
   await expect
     .poll(() => page.evaluate(() => window.__GAME__?.scene.isActive('Game') ?? false), {
@@ -311,9 +312,64 @@ test('R starts the game over in the middle of a level', async ({ page }) => {
   expect(await hud(page)).not.toContain('SCORE 00000')
   expect(await banner(page)).toBe('')
 
-  await holdKey(page, 'KeyR')
+  await holdShiftKey(page, 'KeyR')
   await expect.poll(() => hud(page), { timeout: 5_000 }).toContain('SCORE 00000')
   expect(await hud(page)).toContain('LEVEL 1')
+})
+
+/**
+ * The two buttons he asked for by name: play this level again, and skip a level
+ * that is beating you.
+ *
+ * Both are keys here rather than the phone buttons, which `touch.spec.ts`
+ * covers. What only a real browser can show is that the level really is rebuilt
+ * as he arrived at it — coins back, clock at zero, score wound back — and that
+ * skipping leaves the record book untouched.
+ */
+test('R plays this level again, and N skips a level without writing a time', async ({ page }) => {
+  const consoleErrors = watchForErrors(page)
+
+  await page.goto('/')
+  await waitForGameScene(page)
+
+  // Two levels in, so there is a score to wind back to. Level 2 is arrived at
+  // with everything level 1 was worth.
+  await collectCoins(page)
+  await holdKey(page, 'KeyN')
+  await expect.poll(() => hud(page), { timeout: 5_000 }).toContain('LEVEL 2')
+  const arrivedWith = (await hud(page)).match(/SCORE (\d+)/)?.[1] ?? ''
+  expect(arrivedWith).not.toBe('')
+  expect(arrivedWith).not.toBe('000000')
+
+  await collectCoins(page, 1)
+  await page.waitForTimeout(700)
+  expect(await hud(page)).not.toContain(`SCORE ${arrivedWith}`)
+
+  // R: the same level over again, exactly as he walked into it.
+  await holdKey(page, 'KeyR')
+  await expect.poll(() => hud(page), { timeout: 5_000 }).toContain(`SCORE ${arrivedWith}`)
+  expect(await hud(page)).toContain('LEVEL 2')
+  expect(await hud(page)).toContain('THIS LEVEL 0:0')
+
+  const restarted = await levelState(page)
+  expect(restarted.coinsAlive).toBe(restarted.coinsInLevel)
+  expect(restarted.levelTimeMs).toBeLessThan(600)
+
+  // N in the middle of a level: straight on to level 3, without finishing.
+  await page.waitForTimeout(400)
+  await holdKey(page, 'KeyN')
+  await expect.poll(() => hud(page), { timeout: 5_000 }).toContain('LEVEL 3')
+  expect(await hud(page)).toContain(`SCORE ${arrivedWith}`)
+  expect(await banner(page)).toBe('')
+
+  // A skipped level is not a finished level, so nothing is written down for it.
+  // Level 1, which he really did finish on the way here, is in there — which is
+  // what makes the missing level 2 mean something.
+  const saved = await page.evaluate(() => localStorage.getItem('super-jump-quest.best-times'))
+  expect(saved).toContain('First Steps')
+  expect(saved).not.toContain('The Tall Tower')
+
+  expect(consoleErrors).toEqual([])
 })
 
 /**
@@ -717,6 +773,13 @@ async function holdKey(page: import('@playwright/test').Page, key: string): Prom
   await page.keyboard.down(key)
   await page.waitForTimeout(80)
   await page.keyboard.up(key)
+}
+
+/** The same, with SHIFT held down over the top of it. */
+async function holdShiftKey(page: import('@playwright/test').Page, key: string): Promise<void> {
+  await page.keyboard.down('Shift')
+  await holdKey(page, key)
+  await page.keyboard.up('Shift')
 }
 
 async function notesPlayed(page: import('@playwright/test').Page): Promise<number> {

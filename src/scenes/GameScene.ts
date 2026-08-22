@@ -21,7 +21,7 @@ import { loadBestTimes, saveBestTimes } from '../storage/bestTimes'
 import { TUNING } from '../tuning'
 import { TouchPad, wantsTouchControls } from './TouchPad'
 
-/** What one level hands to the next when you press N. */
+/** What one level hands to the next: which level, and the score to carry in. */
 interface GameSceneData {
   levelIndex?: number
   points?: number
@@ -156,13 +156,32 @@ export class GameScene extends Phaser.Scene {
     // frozen mid-squash.
     this.drawPlayer()
 
-    // R — or the ↻ button on a phone — always means the same thing, wherever
-    // you press it: back to the very beginning, score and all. Checked before
-    // anything else so a kid stuck on a hard jump can start over without
-    // reloading the page, and so that pressing ↻ on the finish banner starts
-    // the game over rather than counting as a "tap to carry on".
-    if (justDown(this.restartKey) || this.touchTapped('restart')) {
+    // R — or ↺ on a phone — plays THIS level again, exactly as he arrived at
+    // it: the coins are back, the clock is at zero, and the score is the one he
+    // walked in with. It's the button a child reaches for twenty times more
+    // often than the other one, which is why it's the one with no SHIFT on it.
+    //
+    // SHIFT+R — or ↻ — is the big one: back to the very beginning, score and
+    // all.
+    //
+    // Both are checked before anything else, so a kid stuck on a hard jump can
+    // start again without reloading the page, and so that pressing one of them
+    // on the finish banner does what it says rather than counting as a "tap to
+    // carry on".
+    //
+    // `justDown` is asked ONCE and the answer kept: asking a key whether it
+    // just went down is also what marks it as answered, so a second ask in the
+    // same frame always says no.
+    const restartPressed = justDown(this.restartKey)
+    const withShift = this.restartKey?.shiftKey ?? false
+
+    if ((restartPressed && withShift) || this.touchTapped('restart')) {
       this.scene.restart({ levelIndex: 0, points: 0 })
+      return
+    }
+
+    if ((restartPressed && !withShift) || this.touchTapped('playAgain')) {
+      this.scene.restart({ levelIndex: this.levelIndex, points: this.startingPoints })
       return
     }
 
@@ -171,6 +190,26 @@ export class GameScene extends Phaser.Scene {
     if (this.outcome) {
       this.handleBannerInput(this.outcome)
       return
+    }
+
+    // N — or ⏭ on a phone — is the way out of a level that is beating you: it
+    // hands you the next one without you having to finish this one.
+    //
+    // Skipping is not winning, and the record book knows the difference: no
+    // time is written down on the way out, because he didn't really play it.
+    // The coins he did pick up he keeps.
+    //
+    // `TUNING.debug.skipLevel` is what turns the whole thing off, key and
+    // button together — it's there "for now", and it leaves by one number
+    // going false.
+    if (TUNING.debug.skipLevel && (justDown(this.nextLevelKey) || this.touchTapped('skip'))) {
+      const skipTo = afterLevel(this.levelIndex, LEVELS.length, TUNING.levels.endless)
+      // Nowhere to skip TO, on the last level of a game that ends. Then the
+      // only way past it is to play it.
+      if (skipTo.levelIndex !== undefined) {
+        this.scene.restart({ levelIndex: skipTo.levelIndex, points: this.scoreState.points })
+        return
+      }
     }
 
     this.advanceTimer(delta)
@@ -195,8 +234,9 @@ export class GameScene extends Phaser.Scene {
 
   /**
    * What only works while the big banner is up: N — or a tap anywhere, on a
-   * phone — carries the score forward into the next level. (R and ↻ are
-   * handled in `update`, because they work at any time.)
+   * phone — carries the score forward into the next level. (R, SHIFT+R and the
+   * buttons along the top are handled in `update`, because they work at any
+   * time.)
    */
   private handleBannerInput(outcome: Progress): void {
     // A tap only counts once the banner has been up a moment. Winning tends to
@@ -630,8 +670,9 @@ export class GameScene extends Phaser.Scene {
       this.outcome = outcome
       this.bannerShownAt = this.time.now
       this.player.setVelocity(0, 0)
-      // Nothing left to steer, and the banner is the thing to read now. ↻ stays
-      // where it is — on a phone it's the only way back to level 1.
+      // Nothing left to steer, and the banner is the thing to read now. The
+      // little buttons along the top stay where they are — on a phone they're
+      // the only way back to level 1, or to another go at this one.
       this.touchPad?.setThumbControlsVisible(false)
 
       // The clock stopped the instant `outcome` was set above, so this is his

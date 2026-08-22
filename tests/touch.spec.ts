@@ -48,7 +48,7 @@ test('the game boots on a phone, with its buttons on the screen', async ({ page 
   await expect(page.locator('footer')).toBeHidden()
 
   // And the game drew itself some buttons.
-  expect(await buttonIds(page)).toEqual(['jump', 'left', 'restart', 'right'])
+  expect(await buttonIds(page)).toEqual(['jump', 'left', 'playAgain', 'restart', 'right', 'skip'])
 
   expect(errors).toEqual([])
 })
@@ -126,6 +126,55 @@ test('the ↻ button starts the game over', async ({ page, context }) => {
   await fingers.tap(await buttonPoint(page, 'restart'))
   await expect.poll(() => hud(page), { timeout: 5_000 }).toContain('SCORE 00000')
   expect(await hud(page)).toContain('LEVEL 1')
+})
+
+test('the ↺ button plays this level again, with the score he arrived with', async ({
+  page,
+  context,
+}) => {
+  await page.goto('/')
+  await waitForGameScene(page)
+  const fingers = await touchscreen(page, context)
+
+  // Level 2, arrived at with everything level 1 was worth.
+  await collectCoins(page)
+  // The banner ignores taps for a moment after it goes up — see
+  // `touch.bannerTapDelayMs` — so give it that moment before tapping past it.
+  await page.waitForTimeout(600)
+  await fingers.tap({ x: 400, y: 180 })
+  await expect.poll(() => hud(page), { timeout: 5_000 }).toContain('LEVEL 2')
+  const arrivedWith = (await hud(page)).match(/SCORE (\d+)/)?.[1] ?? ''
+  expect(arrivedWith).not.toBe('000000')
+
+  await collectCoins(page, 1)
+  await page.waitForTimeout(600)
+  expect(await hud(page)).not.toContain(`SCORE ${arrivedWith}`)
+
+  await fingers.tap(await buttonPoint(page, 'playAgain'))
+  await expect.poll(() => hud(page), { timeout: 5_000 }).toContain(`SCORE ${arrivedWith}`)
+  // The same level, wound back — not the whole game thrown away.
+  expect(await hud(page)).toContain('LEVEL 2')
+  expect(await hud(page)).toContain('THIS LEVEL 0:0')
+})
+
+test('the ⏭ button skips a level that is beating you', async ({ page, context }) => {
+  await page.goto('/')
+  await waitForGameScene(page)
+  const fingers = await touchscreen(page, context)
+
+  await collectCoins(page, 1)
+  const score = (await hud(page)).match(/SCORE (\d+)/)?.[1] ?? ''
+  expect(score).not.toBe('000000')
+
+  await fingers.tap(await buttonPoint(page, 'skip'))
+  await expect.poll(() => hud(page), { timeout: 5_000 }).toContain('LEVEL 2')
+  // The coins he did pick up he keeps, and no banner ever went up: he didn't
+  // finish level 1, he left it.
+  expect(await hud(page)).toContain(`SCORE ${score}`)
+  expect(await banner(page)).toBe('')
+  // Nothing was written in the record book for a level nobody finished.
+  const saved = await page.evaluate(() => localStorage.getItem('super-jump-quest.best-times'))
+  expect(saved).toBe(null)
 })
 
 test('leaning on ↻ starts the game over once, not once per frame', async ({ page, context }) => {

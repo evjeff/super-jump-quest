@@ -22,12 +22,14 @@ instantly — no refresh needed.
 
 **Controls:** arrows or WASD to move, space to jump — and space twice more in
 mid-air for a triple jump. `N` starts the next level when you finish one, and
-`R` starts the whole game over from level 1.
+skips one that's beating you. `R` plays the level you're on again from the
+start, and `Shift+R` starts the whole game over from level 1.
 
 **On a phone:** turn it sideways and the game draws its own buttons — ◀ ▶ under
-your left thumb, a big ▲ under your right, and a small ↻ in the corner to start
-over. Both thumbs work at once, so you can run and jump together. When you
-finish a level, tap the screen to carry on.
+your left thumb, a big ▲ under your right, and three small ones along the top
+away from both thumbs: ↻ start over, ↺ play this level again, ⏭ skip it. Both
+thumbs work at once, so you can run and jump together. When you finish a level,
+tap the screen to carry on.
 
 The clock in the corner times the level you're on and stops when you grab the
 last coin. Your fastest finish on each level is remembered in your browser, so

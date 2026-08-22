@@ -91,7 +91,9 @@ export function bannerText(
 function playAgainLine(controls: ControlHint): string {
   // Short for the same reason as the lines below: see the note there.
   if (controls === 'touch') return 'tap to play again from level 1'
-  return 'press R to play again from level 1'
+  // This is the end of the game, so the offer is the whole game again — and
+  // that is SHIFT+R now. Plain R would only replay the level you just won.
+  return 'press SHIFT+R to start over'
 }
 
 function nextLevelLines(nextLevelNumber: number, controls: ControlHint): string[] {
@@ -101,9 +103,13 @@ function nextLevelLines(nextLevelNumber: number, controls: ControlHint): string[
   // Kept short on purpose. The banner is drawn as one lump of 40px monospace,
   // centred, and it does not wrap: at that size 34 characters is already the
   // full 960 of the screen, and anything longer is simply cut off at BOTH ends.
-  // `progress.test.ts` holds every touch line to that limit.
+  // `progress.test.ts` holds every line to that limit.
   if (controls === 'touch') {
     return [`tap the screen for level ${nextLevelNumber}`, 'or tap ↻ to start over']
   }
-  return [`press N for level ${nextLevelNumber}`, 'press R to start over at level 1']
+  // The second line used to offer the whole game over again. Nobody wanted
+  // that here: you have just finished a level, and the thing you want is
+  // another go at the one you nearly beat the record on. Starting over is
+  // still there — it is SHIFT+R — but it isn't what the banner offers.
+  return [`press N for level ${nextLevelNumber}`, 'press R to play this level again']
 }

@@ -63,7 +63,7 @@ describe('bannerText', () => {
   it('counts levels from 1, the way a person does', () => {
     // Finishing level 1 (index 0) hands you level 2 (index 1).
     expect(bannerText({ kind: 'next-level', levelIndex: 1 })).toBe(
-      'LEVEL 1 DONE!\npress N for level 2\npress R to start over at level 1',
+      'LEVEL 1 DONE!\npress N for level 2\npress R to play this level again',
     )
   })
 
@@ -73,22 +73,47 @@ describe('bannerText', () => {
   })
 
   it('is the real win when the whole game is finished', () => {
-    expect(bannerText({ kind: 'game-complete' })).toBe(
-      'YOU WIN!\npress R to play again from level 1',
+    expect(bannerText({ kind: 'game-complete' })).toBe('YOU WIN!\npress SHIFT+R to start over')
+  })
+
+  // R used to throw the whole run away. It is the button a child reaches for
+  // twenty times more often than that, so now it plays THIS level again, and
+  // starting the whole game over moved to SHIFT+R. The banner has to say so.
+  it('offers this level again on R, not the whole game', () => {
+    expect(bannerText({ kind: 'next-level', levelIndex: 1 })).toContain(
+      'press R to play this level again',
     )
+    expect(bannerText({ kind: 'next-level', levelIndex: 1 })).not.toContain('start over at level 1')
+  })
+
+  it('keeps every line short enough to fit on the screen', () => {
+    // The banner is one lump of 40px monospace, centred, and it does not wrap:
+    // 34 characters is already the full 960 of the screen, and a longer line is
+    // cut off at BOTH ends. That is just as true with a keyboard as without.
+    const banners = [
+      bannerText({ kind: 'next-level', levelIndex: 9 }, ['TIME 0:24.6', 'NEW BEST TIME!']),
+      bannerText({ kind: 'game-complete' }, ['TIME 0:24.6', 'NEW BEST TIME!']),
+      bannerText({ kind: 'game-complete', levelIndex: 3 }, ['TIME 0:24.6']),
+    ]
+
+    for (const banner of banners) {
+      for (const line of banner.split('\n')) {
+        expect(line.length).toBeLessThanOrEqual(34)
+      }
+    }
   })
 
   it('puts extra lines right under the headline, where you look first', () => {
     expect(
       bannerText({ kind: 'next-level', levelIndex: 1 }, ['TIME 0:24.6', 'NEW BEST TIME!']),
     ).toBe(
-      'LEVEL 1 DONE!\nTIME 0:24.6\nNEW BEST TIME!\npress N for level 2\npress R to start over at level 1',
+      'LEVEL 1 DONE!\nTIME 0:24.6\nNEW BEST TIME!\npress N for level 2\npress R to play this level again',
     )
   })
 
   it('puts them on the win screen too', () => {
     expect(bannerText({ kind: 'game-complete' }, ['TIME 0:24.6', 'BEST 0:20.1'])).toBe(
-      'YOU WIN!\nTIME 0:24.6\nBEST 0:20.1\npress R to play again from level 1',
+      'YOU WIN!\nTIME 0:24.6\nBEST 0:20.1\npress SHIFT+R to start over',
     )
   })
 
@@ -97,7 +122,7 @@ describe('bannerText', () => {
   describe('when the win leads on to a made-up level', () => {
     it('points at the next level instead of only offering another go', () => {
       expect(bannerText({ kind: 'game-complete', levelIndex: 3 })).toBe(
-        'YOU WIN!\npress N for level 4\npress R to start over at level 1',
+        'YOU WIN!\npress N for level 4\npress R to play this level again',
       )
     })
 
@@ -173,6 +198,7 @@ describe('bannerText', () => {
       for (const banner of touchBanners) {
         expect(banner).not.toContain('press N')
         expect(banner).not.toContain('press R')
+        expect(banner).not.toContain('SHIFT')
       }
     })
   })

@@ -139,14 +139,21 @@ export const TUNING = {
     /** JUMP, bottom right. It's the one you press most, so it's the biggest. */
     jumpButtonRadius: 60,
 
-    /** The little ↻ start-over button, up in the far corner away from thumbs. */
+    /**
+     * The little buttons in a row along the top, away from both thumbs: ↻
+     * start the whole game over, ↺ play this level again, ⏭ skip it. All three
+     * are this size — small on purpose, so brushing the top of the screen
+     * misses them. Try 26 if a finger keeps missing.
+     */
     restartButtonRadius: 22,
 
     /** How far in from the edge of the screen the buttons sit. */
     edgeMargin: 24,
 
     /**
-     * The gap between ◀ and ▶. Bigger if a thumb keeps catching both at once.
+     * The gap between two buttons that sit side by side — ◀ and ▶ at the
+     * bottom, and the three little ones along the top. Bigger if a thumb keeps
+     * catching both at once.
      */
     directionGap: 12,
 
