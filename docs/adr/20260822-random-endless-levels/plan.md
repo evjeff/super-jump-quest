@@ -496,13 +496,11 @@ than quietly changed:
 - *the ladder is flattest past level 20* — between levels 21–60 and 121–200 the
   floor goes .54 → .53, the coins 15.3 → 15.8 and the hardest hop .40 → .41.
   §4.6 predicts the distance rows flattening; it does not predict the coin count
-  flattening, so an endpoint is probably wrong rather than the model.
-- *a ferry you can board for a blink* — 23 ferries over levels 4–200 give under
-  a second, and 11 take a full sixteen seconds to go there and back. That is the
-  parking spot `level3.ts` threw away. `WINDOW.least` is 0.6 s on purpose for a
-  ferry you can simply wait for again, but `TRIP_SECONDS.most` caps a ONE-WAY
-  trip at 8 s while its comment is talking about a whole trip, and that is the
-  number that wants a second look.
+  flattening, so an endpoint is probably wrong rather than the model. **The
+  timing half of this is fixed** (below); the coin count is still open.
+- ~~*a ferry you can board for a blink*~~ — **fixed**, along with the flat timing
+  dial below. See "What the timing dial was really doing" at the end of this
+  section.
 - *level 4 is not much of a breather* — 19 coins where `spec.md` promised seven
   or eight, and a ferry. The coin dial's gentle end (8) is not what the budget
   actually hands level 4.
@@ -681,3 +679,50 @@ hand-made level too.
 the order that changed (7 and 8 were done before 6, because the buttons are how
 you get to level 12 to play it) and every place this plan turned out to be
 wrong. Step 6 — playing it — is the one still open.
+
+## What the timing dial was really doing
+
+Recorded here because it is the one place the shipped code contradicted the
+ADR, and because the measurement is the argument.
+
+README decision 4 says the timing dial is the one with no ceiling, and the one
+the late ladder is really made of. It was not true. Measured over the whole
+ladder, the mean chance to board a ferry was **2.17 s at levels 4–19, 2.11 s at
+20–59, 2.19 s at 60–119 and 2.09 s at 120–200** — flat, against a dial asking
+1.8 s falling to 0.7 s. Sixty-eight to seventy-two per cent of all 445 ferries
+sat on exactly the same number, and 72% delivered a window more than 1.3× as
+generous as asked. Several were catchable at every instant of their trip.
+
+The cause was `TRIP_SECONDS.least = 1.5` — a floor on the *trip*, three layers
+below the dial trying to set the *window*. Since the window is the trip time
+times the slice of the trip the deck spends within reach, a floor on one is a
+floor on the other, and it bound nearly always.
+
+**The fix puts the floor on the deck's speed instead** — `MAX_DECK_SPEED = 260`
+pixels a second, just above Pip's own 220 — which is the thing we actually mean
+by "not a blur", and which scales properly: a deck that shuffles a short way may
+do it quickly, a long ferry may not. The window is then computed from whatever
+trip comes out, never assumed.
+
+After: **1.35 s (4–19), 1.24 s (20–59), 1.22 s (60–119), 1.16 s (120–200),
+1.19 s (400–600)**, tracking the dial to within about a tenth of a second, with
+over-generous ferries down from 72% to 12–19%.
+
+Two honest notes on that. The late ladder is *less* flat, not un-flat: crossing
+ferries are still held at 1.6 s because missing one stops the level, and that
+floor is most of what is left. And this is the change that reshaped every
+generated level — done now, deliberately, because it is free before anybody has
+a best time and expensive afterwards.
+
+Two holes in the construction were closed at the same time, both of which could
+produce a level nobody could finish and both of which the twelve-try re-roll had
+been quietly covering for:
+
+- a ferry whose deck could not be caught now **widens its deck** until it can —
+  a broader deck keeps its near edge within reach further into its trip — and if
+  even the widest deck the hole has room for will not do, **the hole shrinks**
+  until a bridge reaches both banks.
+- no hole is asked of a ferry wider than 560. Level 3's, the widest a person has
+  ever hand-built here, is 500.
+
+`plan.md` §5's step (h) and §4.4's T1 row should be read with this section.
