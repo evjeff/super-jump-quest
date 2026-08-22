@@ -1,11 +1,55 @@
 # Repository Guidelines
 
-A 2D platformer built by a dad-and-son team. The son (under 10) supplies creative
-direction; the dad types and reviews. Most changes arrive as a sentence like
-*"make him jump higher"*, and most of the code is written with AI assistance.
+A 2D platformer built by a dad-and-son team. The son (nine) is the designer: he
+decides what the game does and how it should feel, and increasingly he decides
+*how it works* too. The dad types and reviews. Most changes arrive as a sentence
+like *"make him jump higher"*, and most of the code is written with AI
+assistance.
 
 Optimize for **a game that keeps working and keeps being fun**, not for
 architectural elegance. The project fails by being abandoned, not by being messy.
+
+## Designing With a Nine-Year-Old
+
+He is a co-designer, not an audience. **Every decision that changes how the game
+plays is his to make or to veto** — including the ones that look technical, like
+how random levels are built or what the game remembers. Your job is to make each
+choice understandable enough that he can actually make it, and then to record
+that he made it.
+
+**Writing anything he will read** — the short version of a decision, a question,
+`IDEAS.md`, an explanation of a change:
+
+- Say what it will **feel like to play**, not what the code does.
+- No jargon. Not *deterministic* — "the same every time". Not *seed* — "the
+  dice". Not *invariant* — "a rule that must never break". Not *reach envelope* —
+  "how far he can jump".
+- Short sentences, one idea each.
+- Give every number something to compare it to. "The hole is 500 wide, and three
+  jumps only carry him 450, so you can't jump it" — not "a 500px gap exceeds the
+  reach envelope".
+- Call things what he calls them. "The ferry one" is a better name than "level 3".
+
+**Asking him to decide something:**
+
+- Offer two to four real choices, each described by what it would be like to
+  play it.
+- Say which one you would pick and why, in one sentence. He is nine, not a
+  rubber stamp — an opinion to argue with is more useful than a blank page.
+- Never ask him to choose between things only an adult can picture. If a choice
+  can't be described in play, decide it yourself and tell him what you did.
+- "Both", "neither" and "I don't care" are real answers. Take them.
+
+**Every ADR package `README.md` opens with a `## The short version`** — the whole
+decision in a few sentences he can read on his own. If you can't write that
+section, the decision isn't understood well enough to be made yet. The rest of
+the package (`spec.md`, `plan.md`) stays as technical as it needs to be; the
+short version is the bridge, not a replacement.
+
+**When he decides something, write down that he decided it, and in his words.**
+"He said the levels should get faster, not further" is a better record than
+"difficulty favours the timing dial" — and in a year it will still explain why
+the code is the way it is.
 
 ## Project Structure & Module Organization
 
@@ -124,6 +168,8 @@ Use `pnpm`, not `npm` — the lockfile is `pnpm-lock.yaml` and CI runs
 
 ## Explaining Your Work
 
-The person reading your output explains it onward to a child. Prefer plain
-language over jargon. When you change a number in `tuning.ts`, say what it will
-*feel* like, not just what it does.
+The person reading your output explains it onward to the nine-year-old who
+designed it — and often reads it out loud as-is. Prefer plain language over
+jargon. When you change a number in `tuning.ts`, say what it will *feel* like,
+not just what it does. See **Designing With a Nine-Year-Old** above for how to
+write anything he will read himself.
