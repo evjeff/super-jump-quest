@@ -3,8 +3,10 @@ import type { GameProbe } from './probe'
 import {
   banner,
   collectCoins,
+  drawnCounts,
   goToLevel,
   hud,
+  levelShape,
   levelTimeMs,
   playerIsGrounded,
   playerY,
@@ -288,6 +290,116 @@ test('the game keeps going past level 3, into levels it made up itself', async (
   const level5 = await levelState(page)
   expect(level5.platforms).toBeGreaterThan(0)
   expect(level5.coinsInLevel).toBeGreaterThan(0)
+
+  expect(consoleErrors).toEqual([])
+})
+
+/**
+ * A made-up level has to be a place, not a picture.
+ *
+ * The generator is unit tested to death, but every one of those tests is about
+ * a list of numbers. This is the one that opens level 4 in a real browser and
+ * asks the questions a nine-year-old asks by looking at the screen: are there
+ * ledges, are there coins, is Pip standing on something instead of dropping
+ * through the floor for ever, and does the HUD know what this level is called?
+ *
+ * It skips in with N rather than playing three levels first, because the walk
+ * from level 1 is its own test and everything it could go wrong at would go
+ * wrong before this test got started.
+ */
+test('a level the game made up is a real place, with real ground under him', async ({ page }) => {
+  const consoleErrors = watchForErrors(page)
+
+  await page.goto('/')
+  await waitForGameScene(page)
+
+  await skipToLevel(page, 4)
+
+  // The HUD names it, and a made-up level has a made-up name after the number.
+  expect(await hud(page)).toMatch(/LEVEL 4 \S/)
+
+  // He starts a little way up and falls; wait until he has landed on whatever
+  // the generator put under him. This is the check that a level made of ledges
+  // he cannot stand on would fail.
+  await expect.poll(() => playerIsGrounded(page), { timeout: 10_000 }).toBe(true)
+
+  // ...and landed on a ledge, not gone through the world. Below 700 he is in
+  // the pit and being put back at the start over and over.
+  expect(await playerY(page)).toBeLessThan(700)
+
+  const level4 = await levelState(page)
+  const drawn = await drawnCounts(page)
+
+  // Every ledge and every coin in the level's numbers is on the canvas.
+  expect(level4.platforms).toBeGreaterThan(0)
+  expect(level4.coinsInLevel).toBeGreaterThan(0)
+  expect(drawn.platforms).toBe(level4.platforms)
+  expect(drawn.coins).toBe(level4.coinsInLevel)
+  expect(drawn.player).toBe(true)
+  expect(level4.banner).toBe('')
+  expect(level4.hud).toContain('COINS 0/')
+
+  // And it is live: picking a coin up takes it off the screen and puts the
+  // points on the board. A drawing of a level would sit there doing neither.
+  await collectCoins(page, 1)
+  await expect.poll(() => hud(page), { timeout: 5_000 }).toContain('COINS 1/')
+  expect(await hud(page)).not.toContain('SCORE 00000')
+  const afterOneCoin = await levelState(page)
+  expect(afterOneCoin.coinsAlive).toBe(afterOneCoin.coinsInLevel - 1)
+
+  // The rest of them finish it, exactly like a level we drew ourselves.
+  await collectCoins(page)
+  expect(await banner(page)).toContain('LEVEL 4 DONE!')
+
+  expect(consoleErrors).toEqual([])
+})
+
+/**
+ * Another go at the level he is on, which is the button he asked for.
+ *
+ * The point of playing a level again is that it is the SAME level again: the
+ * coins he took are back where they were, the clock is at nought, and the
+ * ledges are the ledges he had just learnt. A made-up level is the one place
+ * that could get this wrong — it is built from its number every time it starts,
+ * so a generator that rolled fresh dice would quietly hand him a different
+ * level 4 and lose his best time along with it.
+ */
+test('playing a made-up level again gives back the same level, coins and all', async ({ page }) => {
+  const consoleErrors = watchForErrors(page)
+
+  await page.goto('/')
+  await waitForGameScene(page)
+
+  await skipToLevel(page, 4)
+  await expect.poll(() => playerIsGrounded(page), { timeout: 10_000 }).toBe(true)
+
+  const shapeBefore = await levelShape(page)
+  const arrivedWith = (await hud(page)).match(/SCORE (\d+)/)?.[1] ?? ''
+  expect(arrivedWith).not.toBe('')
+
+  // Take one coin and dawdle, so there is something to put back and something
+  // on the clock to wind down.
+  await collectCoins(page, 1)
+  await page.waitForTimeout(1200)
+  const played = await levelState(page)
+  expect(played.coinsAlive).toBe(played.coinsInLevel - 1)
+  expect(played.levelTimeMs).toBeGreaterThan(900)
+  expect(await hud(page)).not.toContain(`SCORE ${arrivedWith}`)
+
+  await holdKey(page, 'KeyR')
+  await expect.poll(() => hud(page), { timeout: 5_000 }).toContain(`SCORE ${arrivedWith}`)
+
+  const again = await levelState(page)
+  expect(again.hud).toContain('LEVEL 4')
+  // The coin he took is back on its hook...
+  expect(again.coinsAlive).toBe(again.coinsInLevel)
+  expect(again.hud).toContain('COINS 0/')
+  // ...the clock starts again from nought...
+  expect(again.levelTimeMs).toBeLessThan(600)
+  expect(again.hud).toContain('THIS LEVEL 0:00')
+  expect(again.banner).toBe('')
+  // ...and it is the same level 4, down to the last ledge.
+  expect(await levelShape(page)).toBe(shapeBefore)
 
   expect(consoleErrors).toEqual([])
 })
@@ -773,6 +885,20 @@ async function holdKey(page: import('@playwright/test').Page, key: string): Prom
   await page.keyboard.down(key)
   await page.waitForTimeout(80)
   await page.keyboard.up(key)
+}
+
+/**
+ * Skip forward with N until the HUD says he is on the level asked for.
+ *
+ * From level 1, three taps and he is on level 4 — the first one nobody drew by
+ * hand. Playing there instead would mean finishing three levels first, and
+ * every one of them is somewhere else's test.
+ */
+async function skipToLevel(page: import('@playwright/test').Page, level: number): Promise<void> {
+  for (let next = 2; next <= level; next += 1) {
+    await holdKey(page, 'KeyN')
+    await expect.poll(() => hud(page), { timeout: 5_000 }).toContain(`LEVEL ${next}`)
+  }
 }
 
 /** The same, with SHIFT held down over the top of it. */
