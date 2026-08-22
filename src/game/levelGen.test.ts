@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest'
 import type { Level, Platform } from '../levels'
 import { TUNING } from '../tuning'
 import { CHECKS, checkLevel, type Finding } from './levelCheck'
-import { difficultyFor, draftLevel, type GenerateOptions, generateLevel } from './levelGen'
+import {
+  DIALS_AND_SHARES,
+  difficultyFor,
+  draftLevel,
+  type GenerateOptions,
+  generateLevel,
+} from './levelGen'
 import { measureLevel, standingArea } from './levelMeasure'
 import { touchButtonLayout } from './touchControls'
 
@@ -366,14 +372,14 @@ describe('the levels are built out of what tuning.ts says he can do', () => {
 
   it('still breaks no never-ship rule with a jump twice the size', () => {
     for (const number of sample) {
-      expect(brokenIn(generateLevel(number, moonJump), moonJump)).toEqual([])
+      expect(brokenIn(draftLevel(number, 0, moonJump).level, moonJump)).toEqual([])
     }
   })
 
   it('still breaks no never-ship rule with every ferry frozen solid', () => {
     const frozen: GenerateOptions = { ...OPTIONS, movingSpeed: 0 }
     for (const number of NUMBERS) {
-      expect(brokenIn(generateLevel(number, frozen), frozen)).toEqual([])
+      expect(brokenIn(draftLevel(number, 0, frozen).level, frozen)).toEqual([])
     }
   })
 
@@ -389,7 +395,7 @@ describe('the levels are built out of what tuning.ts says he can do', () => {
       physics: { ...TUNING.player, jumpVelocity: 400, gravity: 2400 },
     }
     for (const number of sample) {
-      const level = generateLevel(number, leaden)
+      const level = draftLevel(number, 0, leaden).level
       expect(noRoomToStandOn(level, leaden)).toEqual([])
       expect(standingInsideHim(level, leaden)).toEqual([])
       expect(brokenIn(level, leaden)).toEqual([])
@@ -414,7 +420,7 @@ describe('the levels are built out of what tuning.ts says he can do', () => {
       maxJumps: 2,
     }
     for (const number of sample) {
-      expect(brokenIn(generateLevel(number, floaty), floaty)).toEqual([])
+      expect(brokenIn(draftLevel(number, 0, floaty).level, floaty)).toEqual([])
     }
   })
 
@@ -431,7 +437,7 @@ describe('the levels are built out of what tuning.ts says he can do', () => {
       physics: { speed: 300, jumpVelocity: 220, gravity: 1200 },
     }
     for (const number of sample) {
-      expect(brokenIn(generateLevel(number, scuttling), scuttling)).toEqual([])
+      expect(brokenIn(draftLevel(number, 0, scuttling).level, scuttling)).toEqual([])
     }
   })
 
@@ -439,6 +445,17 @@ describe('the levels are built out of what tuning.ts says he can do', () => {
    * Enormous phone buttons — `touch.buttonRadius` turned right up, which
    * `tuning.ts` invites you to do. Nothing may hide underneath one: not a coin,
    * and not a whole ledge you would have to land on blind.
+   *
+   * This is the ONE claim here made about the level a player gets rather than
+   * about the first thing the builder puts together, and the reason is worth
+   * writing down. At a radius of 130 the ▶ button is 260 across — a quarter of
+   * the screen — and it can sit squarely over a hole. A bridge has to stay
+   * inside one jump of both banks, and when the button swallows that whole
+   * band there is no honest place left to put it. Building the floor somewhere
+   * else is the only answer, and that is what a re-roll IS.
+   *
+   * So this is not the re-roll covering for a bug in the builder. It is the
+   * one case where the builder genuinely has nowhere to go.
    */
   it('keeps out from under the buttons even when they are huge', () => {
     const bigThumbs: GenerateOptions = {
@@ -455,6 +472,24 @@ describe('the levels are built out of what tuning.ts says he can do', () => {
     }
     for (const number of sample) {
       expect(brokenIn(generateLevel(number, bigThumbs), bigThumbs)).toEqual([])
+    }
+  })
+})
+
+describe('the difficulty budget', () => {
+  it('has exactly one share to hand out per dial', () => {
+    // Add an eighth dial to RANGES and forget the eighth share, and every level
+    // that dial touches comes out as nonsense with nothing to show for it. This
+    // is the red test that stops that being a mystery.
+    expect(DIALS_AND_SHARES.shares).toBe(DIALS_AND_SHARES.dials)
+  })
+
+  it('gives every dial a real number to work with', () => {
+    for (const number of NUMBERS) {
+      const draft = draftLevel(number, 0, OPTIONS)
+      for (const weight of Object.values(draft.weights)) {
+        expect(Number.isFinite(weight)).toBe(true)
+      }
     }
   })
 })

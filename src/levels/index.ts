@@ -25,6 +25,7 @@
 
 import { type GenerateOptions, generateLevel } from '../game/levelGen'
 import type { PlatformMotion } from '../game/movingPlatform'
+import { PIP_ON_SCREEN } from '../game/pipSprite'
 import { touchButtonLayout } from '../game/touchControls'
 import { TUNING } from '../tuning'
 import { LEVEL_1 } from './level1'
@@ -98,16 +99,6 @@ export interface LevelWorld {
   /** How fast the made-up levels get mean. Bigger = a gentler climb. */
   ramp: number
 }
-
-/**
- * How big Pip is on the screen: the letter grid in `src/game/pipSprite.ts`, 16
- * by 24, drawn two screen dots to a letter.
- *
- * The level-maker has to know, because a ledge narrower than he is wide is
- * nowhere to stand, and a shelf with less than his own height of air above it
- * is a shelf he can never get into.
- */
-const PIP_ON_SCREEN = { width: 32, height: 48 }
 
 /**
  * The level at `index`, counting from 0 — so `levelFor(0)` is the one a person

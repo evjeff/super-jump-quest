@@ -40,11 +40,22 @@
  */
 
 import type { Coin, Level, Platform } from '../levels'
-import { type CheckContext, checkLevel, levelScore } from './levelCheck'
+import {
+  type Box,
+  boxesOverlap,
+  boxInsideButton,
+  boxOf,
+  type CheckContext,
+  checkLevel,
+  insideBox,
+  isACeilingOver,
+  levelScore,
+  sweptBox,
+} from './levelCheck'
 import { measureLevel } from './levelMeasure'
 import { type PlatformMotion, platformPosition } from './movingPlatform'
 import { hopCost, type JumpPhysics, riseFor, runFor } from './reach'
-import { isOnButton, type TouchButton } from './touchControls'
+import { isOnButton } from './touchControls'
 
 /** Everything the builder needs to know about the game it is building for. */
 export interface GenerateOptions extends CheckContext {
@@ -90,9 +101,6 @@ export type Dials = Record<DialName, number>
 export interface Draft {
   /** The level itself: the same plain data a hand-made level file exports. */
   level: Level
-
-  /** How hard this level number is meant to be, from 0 to nearly 1. */
-  difficulty: number
 
   /** The one dial this level spends its budget on — what it is ABOUT. */
   job: DialName
@@ -152,6 +160,15 @@ const DIAL_NAMES = Object.keys(RANGES) as DialName[]
  * because its jumps are easier than level 1's, not in spite of it.
  */
 const SPIKE = [2, 1.2, 0.7, 0.6, 0.55, 0.5, 0.4]
+
+/**
+ * One share per dial, and there has to be exactly one: add an eighth dial and
+ * the eighth level of this list is missing, so that dial's weight comes out as
+ * nonsense and takes the whole level with it. `levelGen.test.ts` holds the two
+ * lists to the same length so that arrives as a red test, not as a strange
+ * level nobody can explain.
+ */
+export const DIALS_AND_SHARES = { dials: DIAL_NAMES.length, shares: SPIKE.length }
 
 /** How much the dice are allowed to wobble one dial's share of the budget. */
 const WOBBLE = { low: 0.75, high: 1.25 }
@@ -215,8 +232,35 @@ const TRIES = 12
 /** How high the whole climb goes, from the ground up. */
 const CLIMB = { least: 260, most: 400 }
 
-/** A trip that takes less than this is a blur; more than this is a nap. */
-const TRIP_SECONDS = { least: 1.5, most: 8 }
+/** A trip longer than this is a nap: you stand and wait and nothing happens. */
+const TRIP_SECONDS = { most: 8 }
+
+/**
+ * The fastest a deck is allowed to slide, in pixels a second.
+ *
+ * This is what stops a hard level's ferry becoming a blur — and it is the RIGHT
+ * place for that floor, which the first version of this file got wrong.
+ *
+ * The old rule said "no trip shorter than a second and a half". But how long
+ * you get to jump on is the trip time times the slice of it the deck spends
+ * near you, so a floor on the TRIP was a floor on the WINDOW at one remove —
+ * and it bound almost every time. Seven ferries in ten sat exactly on it, and
+ * the boarding window came out flat at about 2.1 seconds from level 4 to level
+ * 200, on a dial that is supposed to run from 1.8 seconds down to 0.7. Some
+ * levels shipped a deck catchable at every instant of its trip, which is a
+ * ledge that wobbles, not a ferry you have to time. The ladder simply stopped
+ * climbing at about level 20 — and "it keeps getting harder" is the thing the
+ * designer asked for by name.
+ *
+ * A speed cap says the thing we actually mean. A deck that crawls a short way
+ * may do it quickly; a long ferry may not. Pip runs at 220, so 260 is a deck
+ * that just outruns him — twice as fast as level 3's ferry, which is a real
+ * step up and still something you can watch coming.
+ */
+const MAX_DECK_SPEED = 260
+
+/** However short the trip, a deck that turns round faster than this is a twitch. */
+const MIN_TRIP_SECONDS = 0.4
 
 /**
  * How long a chance to board a ferry has to last, in seconds.
@@ -227,6 +271,15 @@ const TRIP_SECONDS = { least: 1.5, most: 8 }
  * it just means waiting for it to come round again.
  */
 const WINDOW = { crossing: 1.6, least: 0.6 }
+
+/**
+ * The smallest slice of its trip a deck can be expected to spend within reach.
+ *
+ * Used before any deck exists, to ask "is a ferry worth planning for at all at
+ * this speed". Deliberately gloomy: guessing low here means the floor plans a
+ * ferry only when one will comfortably work.
+ */
+const PESSIMISTIC_CATCH = 0.25
 
 /**
  * How far a bridge is nudged off the middle of its hole, so it is not always
@@ -245,8 +298,23 @@ const FERRY_NUDGE = 5
 /** How far past the far edge a ferry carries him, so he walks off rather than jumps. */
 const FERRY_OVERSHOOT = 40
 
-/** A hole narrower than this has no room for a ferry to park AND still travel. */
-const FERRY_HOLE = 200
+/** Narrower than this is not a deck, it is a stepping stone. */
+const MIN_DECK = 70
+
+/**
+ * How wide a hole a ferry may be asked to cross.
+ *
+ * `least`: narrower than this and there is no room for a deck to park at one
+ * end AND still have a trip to make.
+ *
+ * `most`: level 3's hole — the widest anybody has hand-built, and the best
+ * moment in the game — is 500. Past about there the deck spends so little of
+ * its trip near the bank you are standing on that the chance to jump on gets
+ * short however slowly it goes, and the level turns into standing at an edge
+ * waiting for a sliver. So the widest hole here is a little past our own
+ * bravest one, and no further.
+ */
+const FERRY_HOLE = { least: 200, most: 560 }
 
 /** The highest a ferry's deck sits above the ground it is boarded from. */
 const FERRY_RISE = 110
@@ -360,11 +428,7 @@ function weightsFor(dice: Dice, job: DialName): Dials {
 
   const weights = {} as Dials
   for (const [rank, name] of [job, ...rest].entries()) {
-    // Add an eighth dial one day and there is no eighth share to give it. The
-    // last share is the right thing to hand it — it is the most refunded one,
-    // so a new dial arrives quietly rather than by shouting over the others.
-    const share = SPIKE.at(rank) ?? SPIKE[SPIKE.length - 1]
-    weights[name] = (share as number) * (drawn.get(name) as number)
+    weights[name] = (SPIKE[rank] as number) * (drawn.get(name) as number)
   }
 
   return weights
@@ -396,7 +460,6 @@ export function draftLevel(levelNumber: number, attempt: number, options: Genera
 
   return {
     level: site.level,
-    difficulty,
     job,
     weights,
     shares,
@@ -441,14 +504,6 @@ interface Ledge {
   top: number
 }
 
-/** A rectangle on the screen. `top` is the small y, because y counts down. */
-interface Box {
-  left: number
-  right: number
-  top: number
-  bottom: number
-}
-
 /** A hole in the floor, and what you are meant to do about it. */
 interface Hole {
   left: number
@@ -490,7 +545,23 @@ function layTheLevel(name: string, dice: Dice, dials: Dials, options: GenerateOp
   for (const hole of floor.holes) {
     if (hole.crossing === 'bridge') platforms.push(bridgeOver(hole, dice, dials, options))
     if (hole.crossing !== 'ferry') continue
+
+    // `planTheFloor` only asks for a ferry where one can work, so this is the
+    // belt to that pair of braces. If this particular deck still cannot be
+    // caught in time — a feeble jump cannot get up to a deck, a slow runner
+    // cannot chase one — then the hole stops being a ferry hole. It shrinks
+    // until a bridge reaches both banks, and gets one.
+    //
+    // Shrinking the hole is the honest repair. Leaving it and hoping the next
+    // of the twelve tries comes out better would make the re-roll the thing
+    // that keeps levels finishable, and it is not allowed to be: a level that
+    // cannot be finished must never be BUILT, not merely never shipped.
     const ferry = ferryOver(hole, dice, dials, options)
+    if (ferry === null) {
+      const bridgeable = bridgeSpan(dials, options)
+      platforms.push(bridgeOver(narrowed(hole, bridgeable, platforms), dice, dials, options))
+      continue
+    }
     platforms.push(ferry)
     crossings.add(ferry)
   }
@@ -559,8 +630,7 @@ function tuneTheFerries(
     // dividing by it asks for an infinitely slow trip — which is then held to
     // the longest trip there is, exactly as it should be.
     const seconds = moves.seconds * (wanted / report.boardingWindowSeconds)
-    const settled = Math.min(TRIP_SECONDS.most, Math.max(TRIP_SECONDS.least, seconds))
-    platform.moves = { ...moves, seconds: Math.round(settled * 100) / 100 }
+    platform.moves = { ...moves, seconds: settleTrip(seconds, moves, options) }
   }
 }
 
@@ -609,11 +679,24 @@ function planTheFloor(
   // height to park a deck at, and with every ferry frozen there is no ferry.
   // A deck rides out over the far bank at the end of its trip, so it has to
   // ride high enough that the ground under it is still somewhere to stand.
-  const ferryable = ferries > 0 && ferryRise(dials, options) >= LEDGE_HEIGHT + options.playerHeight
+  //
+  // And it has to be a ferry somebody can actually CATCH. Every deck in the
+  // game runs at `platforms.movingSpeed`, so turning that knob up shortens
+  // every chance to board by the same amount. Past about two and a half, even
+  // the longest, most generous trip cannot hold a chance open for the second
+  // and a bit a crossing needs — so at that point the level stops relying on
+  // ferries and crosses its holes some other way, rather than building a hole
+  // with an answer nobody can reach.
+  const longestChance =
+    (2 * PESSIMISTIC_CATCH * TRIP_SECONDS.most) / Math.max(options.movingSpeed, 0.01)
+  const ferryable =
+    ferries > 0 &&
+    ferryRise(dials, options) >= LEDGE_HEIGHT + options.playerHeight &&
+    longestChance >= WINDOW.crossing
 
   // The widest one hole is allowed to be: a ferry crosses almost anything, a
   // bridge only reaches so far, and without either it has to be jumped.
-  const widest = ferryable ? width : Math.max(jumpable, bridgeable)
+  const widest = ferryable ? FERRY_HOLE.most : Math.max(jumpable, bridgeable)
 
   // A hole nothing can get over is not a hole, it is the end of the level, so
   // a level with no way of crossing anything simply keeps its floor.
@@ -632,27 +715,38 @@ function planTheFloor(
   while (count > 1 && count * MIN_HOLE > wanted) count--
 
   const room = width - START_GROUND - count * MIN_GROUND
-  const widths = shareOut(dice, Math.min(wanted, room), count, MIN_HOLE)
+  // If the missing floor cannot be split into holes this level can cross — there
+  // is only so much room for pieces of ground to stand between them — then it
+  // takes back some of the floor it wanted to remove. A slightly kinder floor
+  // than the dial asked for is a real cost; a hole with no way over it is not a
+  // cost, it is the end of the level.
+  const widths = shareOut(dice, Math.min(wanted, room, count * widest), count, MIN_HOLE)
 
+  // Deciding how you get over a hole can also make the hole SMALLER — if nothing
+  // in this level crosses it, it shrinks until something does. So this is a
+  // plain loop rather than a `map`: the write back into `widths` is the point,
+  // and `solid` below is counted from the holes as they finally are.
   let ferriesLeft = ferries
-  const crossings = widths.map((hole, index): Hole['crossing'] => {
-    if (hole <= jumpable) return 'jump'
-    if (
+  const crossings: Hole['crossing'][] = []
+  for (const [index, hole] of widths.entries()) {
+    const ferryThisOne =
       ferriesLeft > 0 &&
       ferryable &&
-      hole >= FERRY_HOLE &&
+      hole >= FERRY_HOLE.least &&
       (hole > bridgeable || dice.next() < 0.4)
-    ) {
-      ferriesLeft--
-      return 'ferry'
-    }
-    if (hole <= bridgeable) return 'bridge'
 
-    // Nothing here crosses a hole this wide, so it stops being one: it shrinks
-    // to the widest hole this level really does have an answer to.
-    widths[index] = Math.max(jumpable, bridgeable)
-    return bridgeable > jumpable ? 'bridge' : 'jump'
-  })
+    if (hole <= jumpable) {
+      crossings.push('jump')
+    } else if (ferryThisOne) {
+      ferriesLeft--
+      crossings.push('ferry')
+    } else if (hole <= bridgeable) {
+      crossings.push('bridge')
+    } else {
+      widths[index] = Math.max(jumpable, bridgeable)
+      crossings.push(bridgeable > jumpable ? 'bridge' : 'jump')
+    }
+  }
 
   const solid = width - widths.reduce((total, hole) => total + hole, 0)
   const ground = shareOut(dice, solid - START_GROUND + MIN_GROUND, count + 1, MIN_GROUND)
@@ -721,6 +815,31 @@ function bridgeSide(dials: Dials, options: GenerateOptions): number {
 }
 
 /**
+ * Give the ground back until the hole is one this level really can cross.
+ *
+ * The bank on the right grows leftwards to meet it. That is a real cost — this
+ * level ends up with more floor than its dial asked for — and it is the right
+ * one to pay: a floor that is a little kinder than intended is a level; a hole
+ * with nothing over it is the end of one.
+ */
+function narrowed(hole: Hole, widest: number, platforms: Platform[]): Hole {
+  if (hole.right - hole.left <= widest) return hole
+
+  const wanted = hole.left + widest
+  // Always found: every hole was cut between two pieces of ground, and this is
+  // the piece on its right-hand side.
+  const bank = platforms.find(
+    (platform) => platform.moves === undefined && Math.abs(boxOf(platform).left - hole.right) < 1,
+  ) as Platform
+
+  const right = boxOf(bank).right
+  bank.width = right - wanted
+  bank.x = wanted + bank.width / 2
+
+  return { ...hole, right: wanted }
+}
+
+/**
  * A ledge standing in the middle of a hole, so the hole has a middle.
  *
  * It is nudged off centre so that no two bridges look stamped out of the same
@@ -740,14 +859,31 @@ function bridgeOver(hole: Hole, dice: Dice, dials: Dials, options: GenerateOptio
   const furthest = Math.max(nearest, Math.min(hole.left + side, hole.right - ELBOW_ROOM - width))
   const middle = (hole.left + hole.right) / 2 - width / 2
   const nudged = middle + dice.between(-BRIDGE_NUDGE, BRIDGE_NUDGE)
-  const left = Math.min(furthest, Math.max(nearest, nudged))
+  const nudgedInBand = Math.min(furthest, Math.max(nearest, nudged))
+  const top = Math.round(groundTop - rise + LEDGE_HEIGHT / 2)
 
-  return {
+  const deckAt = (left: number): Platform => ({
     x: Math.round(left + width / 2),
-    y: Math.round(groundTop - rise + LEDGE_HEIGHT / 2),
+    y: top,
     width,
     height: LEDGE_HEIGHT,
-  }
+  })
+
+  // A bridge is the only way over its hole, so it must not end up somewhere a
+  // phone draws a button over it: on a big-thumbed layout the whole deck can
+  // disappear under ▶, and then the way across the level is invisible. Both
+  // ends of the band are still one jump from their bank, so sliding along it
+  // costs nothing — this is why the band is worked out before the nudge, and
+  // not the other way round.
+  const inTheBand = [nudgedInBand, nearest, furthest, (nearest + furthest) / 2]
+  const clear = inTheBand.find((left) => !hiddenUnderAButton(deckAt(left), options))
+  return deckAt(clear ?? nudgedInBand)
+}
+
+/** Is this whole deck swallowed by one of the buttons a phone draws? */
+function hiddenUnderAButton(deck: Platform, options: GenerateOptions): boolean {
+  const box = boxOf(deck)
+  return options.touchButtons.some((button) => boxInsideButton(box, button))
 }
 
 /**
@@ -764,30 +900,66 @@ function bridgeOver(hole: Hole, dice: Dice, dials: Dials, options: GenerateOptio
  * board it should last — the window is *computed*, never assumed, because
  * getting one ferry's parking spot right by eye took three goes.
  */
-function ferryOver(hole: Hole, dice: Dice, dials: Dials, options: GenerateOptions): Platform {
+function ferryOver(
+  hole: Hole,
+  dice: Dice,
+  dials: Dials,
+  options: GenerateOptions,
+): Platform | null {
   const groundTop = options.world.height - GROUND_HEIGHT
 
   // Narrow enough that there is a real trip left over once it has parked at
   // the near end. A hole only gets a ferry if it is wide enough for both.
   const room = hole.right - hole.left + FERRY_OVERSHOOT - FERRY_NUDGE - MIN_HOLE
-  const deck = Math.round(Math.min(dials.narrowestLedge + dice.between(20, 60), room))
+  const asked = Math.round(Math.min(dials.narrowestLedge + dice.between(20, 60), room))
 
   const top = groundTop - ferryRise(dials, options)
-  const home = hole.left + FERRY_NUDGE + deck / 2
-  const moveX = Math.round(hole.right + FERRY_OVERSHOOT - (home + deck / 2))
-
-  const ferry: Platform = {
-    x: Math.round(home),
-    y: Math.round(top + LEDGE_HEIGHT / 2),
-    width: deck,
-    height: LEDGE_HEIGHT,
-    moves: { moveX, seconds: 1 },
-  }
-
   const bank = { left: 0, right: hole.left, top: groundTop }
   const wanted = Math.max(dials.boardingWindow, WINDOW.crossing)
-  ferry.moves = { moveX, seconds: tripSecondsFor(ferry, bank, wanted, options) }
-  return ferry
+
+  // A wider deck is a longer chance: what you are jumping at is its near edge,
+  // and a broad deck keeps that edge near you further into its trip. So over a
+  // hole nothing else crosses, the deck is allowed to grow until the chance to
+  // board it is a fair one — the width the dial asked for is a starting point,
+  // not a rule. This is the ferry over the widest hole in the level; it is the
+  // last thing that should be stingy.
+  //
+  // If even the widest deck this hole has room for cannot be caught in time,
+  // there is no ferry to build and the caller crosses the hole another way. An
+  // unfinishable level must not be built in the first place.
+  for (const deck of deckWidths(asked, room)) {
+    const home = hole.left + FERRY_NUDGE + deck / 2
+    const moveX = Math.round(hole.right + FERRY_OVERSHOOT - (home + deck / 2))
+    const ferry: Platform = {
+      x: Math.round(home),
+      y: Math.round(top + LEDGE_HEIGHT / 2),
+      width: deck,
+      height: LEDGE_HEIGHT,
+      moves: { moveX, seconds: 1 },
+    }
+
+    const trip = tripFor(ferry, bank, wanted, WINDOW.crossing, options)
+    if (trip === null) continue
+
+    ferry.moves = { moveX, seconds: trip.seconds }
+    return ferry
+  }
+
+  return null
+}
+
+/**
+ * Deck widths to try for a crossing ferry, narrowest first.
+ *
+ * Narrowest first because the width the dial asked for is the one the level is
+ * meant to have; the wider ones are only reached for when that deck cannot be
+ * caught in time. Drawing no dice keeps every other level exactly where it was.
+ */
+function deckWidths(asked: number, room: number): number[] {
+  const widths = [asked, asked * 1.5, asked * 2, room]
+  return [...new Set(widths.map((width) => Math.round(Math.min(width, room))))].filter(
+    (width) => width >= MIN_DECK,
+  )
 }
 
 /**
@@ -857,29 +1029,41 @@ function catchableFraction(deck: Platform, from: Ledge, options: GenerateOptions
  * slower trip is a longer chance — that is the whole of the timing dial, and
  * it is the one dial that can keep getting harder forever.
  */
-function tripSecondsFor(
+function tripFor(
   deck: Platform,
   from: Ledge,
   wanted: number,
+  atLeast: number,
   options: GenerateOptions,
-): number {
+): { seconds: number; window: number } | null {
   const caught = catchableFraction(deck, from, options)
-  if (caught <= 0) return TRIP_SECONDS.most
+  if (caught <= 0) return null
 
   const speed = Math.max(options.movingSpeed, 0.01)
-  const seconds = (wanted * speed) / (2 * caught)
-  return Math.round(Math.min(TRIP_SECONDS.most, Math.max(TRIP_SECONDS.least, seconds)) * 100) / 100
+
+  // Slow enough that the deck is not a blur, and never so slow that riding it
+  // is a nap. Both floors are about the DECK; the window falls out of them.
+  const ideal = (wanted * speed) / (2 * caught)
+  const seconds = settleTrip(ideal, deck.moves as PlatformMotion, options)
+
+  // What that trip really buys, rather than what was asked for. Rounding and
+  // both floors move it, so it is worked out again rather than assumed — and a
+  // deck nobody could get on to in time is no answer at all.
+  const window = (2 * caught * seconds) / speed
+  return window >= atLeast ? { seconds, window } : null
 }
 
-/** How long the chance to board this deck really lasts, once the trip is set. */
-function windowSecondsFor(
-  deck: Platform,
-  from: Ledge,
-  seconds: number,
-  options: GenerateOptions,
-): number {
-  const speed = Math.max(options.movingSpeed, 0.01)
-  return (2 * catchableFraction(deck, from, options) * seconds) / speed
+/**
+ * Hold a trip time to what a deck can sensibly do: never a blur, never a nap.
+ *
+ * Written once, because it is applied twice — when a deck is first given its
+ * motion, and again after the whole level has been measured.
+ */
+function settleTrip(seconds: number, moves: PlatformMotion, options: GenerateOptions): number {
+  const travel = Math.hypot(moves.moveX ?? 0, moves.moveY ?? 0)
+  const slowest = Math.max(MIN_TRIP_SECONDS, (travel * options.movingSpeed) / MAX_DECK_SPEED)
+  const settled = Math.min(TRIP_SECONDS.most, Math.max(slowest, seconds))
+  return Math.round(settled * 100) / 100
 }
 
 /** Hand out `total` between `parts` of them, none smaller than `minimum`. */
@@ -1052,12 +1236,12 @@ function nextRung(
  */
 function thereIsRoom(box: Box, placed: Platform[], options: GenerateOptions): boolean {
   if (box.left < SCREEN_MARGIN || box.right > options.world.width - SCREEN_MARGIN) return false
-  if (options.touchButtons.some((button) => hiddenUnder(box, button))) return false
-  if (overlaps(box, whereHeStarts(options))) return false
+  if (options.touchButtons.some((button) => boxInsideButton(box, button))) return false
+  if (boxesOverlap(box, whereHeStarts(options))) return false
 
   const mine = standingRoom(box, options, ELBOW_ROOM)
   return !placed.some((platform) =>
-    overlaps(mine, standingRoom(sweptBoxOf(platform, options), options, 0)),
+    boxesOverlap(mine, standingRoom(sweptBox(platform, options.movingSpeed), options, 0)),
   )
 }
 
@@ -1130,14 +1314,17 @@ function makeMovers(route: Step[], platforms: Platform[], shop: Workshop, budget
 
     for (const moves of travelsFor(deck, away, dice)) {
       const trial = { ...step.platform, moves }
-      const swept = sweptBoxOf(trial, options)
-      const seconds = tripSecondsFor(trial, step.from, dials.boardingWindow, options)
+      const swept = sweptBox(trial, options.movingSpeed)
 
       if (!thereIsRoom(swept, others, options)) continue
       if (aCeilingOverTheStart(swept, options)) continue
-      if (windowSecondsFor(trial, step.from, seconds, options) < WINDOW.least) continue
 
-      step.platform.moves = { ...moves, seconds }
+      // Miss one of these and you only wait for it to come round again, so it
+      // is held to the ordinary fairness floor rather than a crossing's.
+      const trip = tripFor(trial, step.from, dials.boardingWindow, WINDOW.least, options)
+      if (trip === null) continue
+
+      step.platform.moves = { ...moves, seconds: trip.seconds }
       made++
       break
     }
@@ -1161,14 +1348,16 @@ function travelsFor(deck: Ledge, away: number, dice: Dice): PlatformMotion[] {
   return ways.filter((way) => way.distance >= 50).map((way) => way.moves)
 }
 
-/** A deck hanging over his head where he starts is a thing to bonk, not to ride. */
+/**
+ * A deck hanging over his head where he starts is a thing to bonk, not to ride.
+ *
+ * The rule itself is `isACeilingOver` in `levelCheck.ts` — one statement of it,
+ * obeyed here and enforced there. The builder keeps a whole player-width clear
+ * either side rather than the half-width that really bonks him: giving a ferry
+ * somewhere else to park costs nothing, and getting it wrong costs the level.
+ */
 function aCeilingOverTheStart(swept: Box, options: GenerateOptions): boolean {
-  const reach = riseFor(options.maxJumps, options.physics)
-  const overHim =
-    swept.left <= PLAYER_START.x + options.playerWidth &&
-    swept.right >= PLAYER_START.x - options.playerWidth
-
-  return overHim && swept.bottom <= PLAYER_START.y && swept.top >= PLAYER_START.y - reach
+  return isACeilingOver(swept, PLAYER_START, options.playerWidth, options)
 }
 
 /** The same list, shuffled the same way every time for the same dice. */
@@ -1266,7 +1455,7 @@ function aGoodSpotForACoin(
     return false
 
   return !platforms.some(
-    (platform) => platform.moves === undefined && inside(spot, grown(boxOf(platform), 4)),
+    (platform) => platform.moves === undefined && insideBox(spot, grown(boxOf(platform), 4)),
   )
 }
 
@@ -1305,57 +1494,6 @@ const JOB_WORDS: Record<DialName, readonly string[]> = {
   routeDepth: ['Climb', 'Stairs'],
 }
 
-/** Where a platform is right now, at the start of the level. */
-function boxOf(platform: Platform): Box {
-  return {
-    left: platform.x - platform.width / 2,
-    right: platform.x + platform.width / 2,
-    top: platform.y - platform.height / 2,
-    bottom: platform.y + platform.height / 2,
-  }
-}
-
-/** Everywhere a platform ever gets to over the course of one trip. */
-function sweptBoxOf(platform: Platform, options: GenerateOptions): Box {
-  const box = boxOf(platform)
-  const moves = platform.moves
-  if (!moves || options.movingSpeed === 0) return box
-
-  const far = platformPosition(platform, moves.seconds * 1000)
-  const moveX = far.x - platform.x
-  const moveY = far.y - platform.y
-
-  return {
-    left: box.left + Math.min(0, moveX),
-    right: box.right + Math.max(0, moveX),
-    top: box.top + Math.min(0, moveY),
-    bottom: box.bottom + Math.max(0, moveY),
-  }
-}
-
 function grown(box: Box, by: number): Box {
   return { left: box.left - by, right: box.right + by, top: box.top - by, bottom: box.bottom + by }
-}
-
-function overlaps(one: Box, other: Box): boolean {
-  return (
-    one.left < other.right &&
-    one.right > other.left &&
-    one.top < other.bottom &&
-    one.bottom > other.top
-  )
-}
-
-function inside(point: Coin, box: Box): boolean {
-  return point.x >= box.left && point.x <= box.right && point.y >= box.top && point.y <= box.bottom
-}
-
-/** Is every corner of this rectangle inside this round button? */
-function hiddenUnder(box: Box, button: TouchButton): boolean {
-  return [
-    { x: box.left, y: box.top },
-    { x: box.right, y: box.top },
-    { x: box.left, y: box.bottom },
-    { x: box.right, y: box.bottom },
-  ].every((corner) => isOnButton(button, corner))
 }

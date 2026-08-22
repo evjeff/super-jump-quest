@@ -5,7 +5,6 @@ import { LEVEL_2 } from '../levels/level2'
 import { LEVEL_3 } from '../levels/level3'
 import { TUNING } from '../tuning'
 import { CHECKS, type CheckContext, checkLevel, type Finding, levelScore } from './levelCheck'
-import { measureLevel } from './levelMeasure'
 import { touchButtonLayout } from './touchControls'
 
 /**
@@ -340,12 +339,5 @@ describe('the list of checks itself', () => {
     for (const finding of checkLevel(LEVEL_2, CONTEXT)) {
       expect(finding.complaint.length).toBeGreaterThan(20)
     }
-  })
-
-  it('takes a measurement someone else has already made', () => {
-    const measured = measureLevel(LEVEL_3, CONTEXT)
-    expect(checkLevel(LEVEL_3, { ...CONTEXT, measurement: measured })).toEqual(
-      checkLevel(LEVEL_3, CONTEXT),
-    )
   })
 })

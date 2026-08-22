@@ -48,14 +48,20 @@ export const TUNING = {
 
   platforms: {
     /**
-     * How fast the moving platforms in level 3 go — all of them at once.
+     * How fast every sliding platform goes — level 3's, and every ferry in
+     * every made-up level, all of them at once.
      *
-     * 1 is normal. 0.5 is half speed, which makes level 3 much kinder. 2 is
-     * twice as fast. 0 freezes every moving platform where it starts, which
-     * turns level 3 into an ordinary level.
+     * 1 is normal. 0.5 is half speed, which makes level 3 much kinder and gives
+     * you twice as long to hop on to a ferry anywhere else. 0 freezes the lot
+     * where they start, which turns level 3 into an ordinary level.
      *
-     * How far each one travels, and how long its own trip takes, is in
-     * `src/levels/level3.ts` — that's the level's DESIGN. This knob is for
+     * Turning it UP makes every ferry harder to catch, and the made-up levels
+     * know it: past about 2.5 there is no chance long enough to be fair, so
+     * they stop putting ferries over holes and cross them another way instead.
+     * You will see fewer sliding ledges, not impossible ones.
+     *
+     * How far level 3's platforms travel, and how long each trip takes, is in
+     * `src/levels/level3.ts` — that's that level's DESIGN. This knob is for
      * "that's too hard for me today" without opening a level file.
      */
     movingSpeed: 1,

@@ -1,10 +1,7 @@
 import Phaser from 'phaser'
-import { PIP_HEIGHT, PIP_KEYS, PIP_ROWS, PIP_WIDTH } from '../game/pipSprite'
+import { PIP_HEIGHT, PIP_KEYS, PIP_PIXEL, PIP_ROWS, PIP_WIDTH } from '../game/pipSprite'
 import { makeStarfield } from '../game/starfield'
 import { TUNING } from '../tuning'
-
-/** How many screen pixels one square of Pip is. 16 x 24 squares x 2 = 32 x 48. */
-const PIP_PIXEL = 2
 
 /** How many faint circles the moon's halo is built from. More = smoother. */
 const MOON_HALO_RINGS = 34

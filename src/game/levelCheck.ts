@@ -42,7 +42,7 @@ import {
   measureLevel,
   standingArea,
 } from './levelMeasure'
-import { hopCost, type Point, riseFor, runFor } from './reach'
+import { hopCost, type JumpPhysics, type Point, riseFor, runFor } from './reach'
 import { isOnButton, type TouchButton } from './touchControls'
 
 /** How bad a thing is. See the two paragraphs at the top of this file. */
@@ -173,7 +173,10 @@ export const CHECKS: readonly Check[] = [
  * calls. An empty list means it is worth playing.
  */
 export function checkLevel(level: Level, context: CheckContext): Finding[] {
-  const measured = context.measurement ?? measureLevel(level, context)
+  // Always measured here, never handed in. The one caller that could hand one
+  // over — the builder — cannot: it retimes the ferries AFTER measuring, so any
+  // measurement it had is out of date by the time it asks for a verdict.
+  const measured = measureLevel(level, context)
 
   return CHECKS.flatMap((check) =>
     check.look(level, context, measured).map((found) => ({
@@ -340,20 +343,46 @@ function ledgesTooNarrow(level: Level, context: CheckContext) {
  */
 function ceilingsOverTheStart(level: Level, context: CheckContext) {
   const start = level.playerStart
-  const half = context.playerWidth / 2
-  const asHighAsHeGets = riseFor(context.maxJumps, context.physics)
 
   return level.platforms
     .filter((platform) => platform.moves !== undefined)
-    .filter((platform) => {
-      const swept = sweptBox(platform, context.movingSpeed)
-      const overHim = swept.left <= start.x + half && swept.right >= start.x - half
-      return overHim && swept.bottom <= start.y && swept.top >= start.y - asHighAsHeGets
-    })
+    .filter((platform) =>
+      isACeilingOver(
+        sweptBox(platform, context.movingSpeed),
+        start,
+        context.playerWidth / 2,
+        context,
+      ),
+    )
     .map((platform) => ({
       complaint: `The sliding ledge at ${at(platform)} hangs over his head where he starts, so jumping just bonks him on its underside.`,
       where: { x: platform.x, y: platform.y },
     }))
+}
+
+/**
+ * Is this deck hanging over his head, close enough that jumping bonks him?
+ *
+ * The rule is stated once, here, and the builder in `levelGen.ts` obeys the
+ * same one rather than carrying its own copy — otherwise the day somebody
+ * refines this, the builder carries on making levels its own checker rejects,
+ * quietly burning all twelve tries and shipping the least-bad one.
+ *
+ * `reachEitherSide` is how far to each side of him still counts as overhead.
+ * The checker uses half his width, which is what actually bonks him. The
+ * builder passes something wider, because refusing to park a deck NEAR his head
+ * is cheap and being wrong about it costs a level.
+ */
+export function isACeilingOver(
+  swept: Box,
+  start: Point,
+  reachEitherSide: number,
+  context: { maxJumps: number; physics: JumpPhysics },
+): boolean {
+  const asHighAsHeGets = riseFor(context.maxJumps, context.physics)
+  const overHim =
+    swept.left <= start.x + reachEitherSide && swept.right >= start.x - reachEitherSide
+  return overHim && swept.bottom <= start.y && swept.top >= start.y - asHighAsHeGets
 }
 
 /**
@@ -559,7 +588,7 @@ function groundLineOf(measured: LevelMeasurement): number {
 }
 
 /** A rectangle on the screen. `top` is the small y, because y counts down. */
-interface Box {
+export interface Box {
   left: number
   right: number
   top: number
@@ -567,7 +596,7 @@ interface Box {
 }
 
 /** Where a platform is right now, at the start of the level. */
-function boxOf(platform: Platform): Box {
+export function boxOf(platform: Platform): Box {
   return {
     left: platform.x - platform.width / 2,
     right: platform.x + platform.width / 2,
@@ -581,7 +610,7 @@ function boxOf(platform: Platform): Box {
  * — so this agrees with the tape measure and with the game itself about where a
  * ferry goes, rather than doing the sums a third time.
  */
-function sweptBox(platform: Platform, movingSpeed: number): Box {
+export function sweptBox(platform: Platform, movingSpeed: number): Box {
   const deck = standingArea(platform, movingSpeed)
   return {
     left: deck.left,
@@ -592,7 +621,7 @@ function sweptBox(platform: Platform, movingSpeed: number): Box {
 }
 
 /** Do these two rectangles share any space? Edges touching does not count. */
-function boxesOverlap(one: Box, other: Box): boolean {
+export function boxesOverlap(one: Box, other: Box): boolean {
   return (
     one.left < other.right &&
     one.right > other.left &&
@@ -601,12 +630,12 @@ function boxesOverlap(one: Box, other: Box): boolean {
   )
 }
 
-function insideBox(point: Point, box: Box): boolean {
+export function insideBox(point: Point, box: Box): boolean {
   return point.x >= box.left && point.x <= box.right && point.y >= box.top && point.y <= box.bottom
 }
 
 /** Is every corner of this rectangle inside this round button? */
-function boxInsideButton(box: Box, button: TouchButton): boolean {
+export function boxInsideButton(box: Box, button: TouchButton): boolean {
   return [
     { x: box.left, y: box.top },
     { x: box.right, y: box.top },
