@@ -61,6 +61,46 @@ export const TUNING = {
     movingSpeed: 1,
   },
 
+  /**
+   * WHERE LEVELS COME FROM once you've played the ones we drew.
+   *
+   * Levels 1, 2 and 3 are ours — somebody put every single ledge where it is.
+   * Everything after them the game makes up for itself, and it never runs out.
+   */
+  levels: {
+    /**
+     * Does the game keep going after level 3?
+     *
+     * true = you beat level 3, get YOU WIN! for it, and then walk straight on
+     * into level 4, level 5, level 500. false = the old three-level game,
+     * exactly as it was: YOU WIN! and that's the evening.
+     */
+    endless: true,
+
+    /**
+     * The one number every made-up level is grown from.
+     *
+     * Level 12 is the same level 12 on every computer, today and next
+     * Saturday — same ledges, same coins, same name — which is what makes
+     * "try level 12, it's the one with the huge hole" mean anything.
+     *
+     * Change this number and EVERY level past 3 becomes a different level: a
+     * whole new set of them to play. Try 7. Change it back to 1 and the old
+     * ones come back exactly as they were, best times and all.
+     */
+    worldSeed: 1,
+
+    /**
+     * How quickly the made-up levels turn nasty.
+     *
+     * Bigger = a gentler climb, so it takes many more levels before the holes
+     * get wide, the ledges get small and the ferries get fussy. 8 means level
+     * 10 is a step up from level 4 and level 100 is properly hard. Try 25 for
+     * a long, kind ladder, or 3 if he wants a fight by level 8.
+     */
+    ramp: 8,
+  },
+
   coins: {
     /** Points per coin. */
     value: 10,
@@ -137,6 +177,20 @@ export const TUNING = {
 
     /** Fall below this and you respawn at the start. */
     deathDepth: 700,
+  },
+
+  /**
+   * Switches for the grown-up, not for how the game feels. Everything here is
+   * a way of getting AROUND playing the game properly.
+   */
+  debug: {
+    /**
+     * The skip button: leave a level you're stuck on without finishing it.
+     *
+     * A skipped level never sets a best time — you didn't really play it.
+     * Turn this off and every level has to be earned.
+     */
+    skipLevel: true,
   },
 
   /** The stars in the night sky. Their colour is `colors.night.star`. */

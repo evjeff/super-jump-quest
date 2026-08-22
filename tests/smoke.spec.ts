@@ -244,6 +244,55 @@ test('finishing a level starts the next one, and finishing the last one wins', a
 })
 
 /**
+ * The game does not end any more, and this is the test that says so in a real
+ * browser.
+ *
+ * Levels 4 and up are made up by `src/game/levelGen.ts` rather than drawn by
+ * hand, and every unit test in the world can pass while a made-up level draws
+ * nothing at all. So: win the hand-made game, walk out of the YOU WIN! screen
+ * into level 4, and prove level 4 has ledges, has coins, can be finished, and
+ * hands you a level 5.
+ */
+test('the game keeps going past level 3, into levels it made up itself', async ({ page }) => {
+  const consoleErrors = watchForErrors(page)
+
+  await page.goto('/')
+  await waitForGameScene(page)
+
+  // Straight to the last hand-made level; the full walk from level 1 is the
+  // test above.
+  await goToLevel(page, 2)
+  await collectCoins(page)
+
+  // Beating level 3 is still a win — and now the win points somewhere.
+  expect(await banner(page)).toContain('YOU WIN!')
+  expect(await banner(page)).toContain('press N for level 4')
+
+  await holdKey(page, 'KeyN')
+  await expect.poll(() => hud(page), { timeout: 5_000 }).toContain('LEVEL 4')
+
+  const level4 = await levelState(page)
+  expect(level4.platforms).toBeGreaterThan(0)
+  expect(level4.coinsInLevel).toBeGreaterThan(0)
+  expect(level4.coinsAlive).toBe(level4.coinsInLevel)
+  expect(level4.banner).toBe('')
+  expect(level4.hud).toContain('COINS 0/')
+
+  // A made-up level is an ordinary level: finish it and level 5 is waiting.
+  await collectCoins(page)
+  expect(await banner(page)).toContain('LEVEL 4 DONE!')
+
+  await holdKey(page, 'KeyN')
+  await expect.poll(() => hud(page), { timeout: 5_000 }).toContain('LEVEL 5')
+
+  const level5 = await levelState(page)
+  expect(level5.platforms).toBeGreaterThan(0)
+  expect(level5.coinsInLevel).toBeGreaterThan(0)
+
+  expect(consoleErrors).toEqual([])
+})
+
+/**
  * The page and the README both promise that R starts over. It has to work while
  * he is still playing, not only on the win screen — being stuck on a hard jump
  * with no way back except reloading the page is how a Saturday morning ends.

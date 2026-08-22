@@ -24,6 +24,39 @@ describe('afterLevel', () => {
   it('is the end of the game when there are no levels at all', () => {
     expect(afterLevel(0, 0)).toEqual({ kind: 'game-complete' })
   })
+
+  // Levels 1 to 3 are the ones we drew. Past them the game makes its own up
+  // and never runs out — but finishing the last hand-made one is still a real
+  // win, so YOU WIN! stays exactly where it was.
+  describe('when the levels never run out', () => {
+    it('still wins the game after the last hand-made level', () => {
+      expect(afterLevel(2, 3, true)).toEqual({ kind: 'game-complete', levelIndex: 3 })
+    })
+
+    it('says which made-up level the win leads on to', () => {
+      // Index 3 is the one a person calls level 4 — the first one the game
+      // makes up for itself.
+      const outcome = afterLevel(2, 3, true)
+      expect(outcome.kind === 'game-complete' && outcome.levelIndex).toBe(3)
+    })
+
+    it('just carries on once you are past the hand-made levels', () => {
+      expect(afterLevel(3, 3, true)).toEqual({ kind: 'next-level', levelIndex: 4 })
+      expect(afterLevel(4, 3, true)).toEqual({ kind: 'next-level', levelIndex: 5 })
+      expect(afterLevel(499, 3, true)).toEqual({ kind: 'next-level', levelIndex: 500 })
+    })
+
+    it('goes level to level exactly as before inside the hand-made ones', () => {
+      expect(afterLevel(0, 3, true)).toEqual({ kind: 'next-level', levelIndex: 1 })
+      expect(afterLevel(1, 3, true)).toEqual({ kind: 'next-level', levelIndex: 2 })
+    })
+
+    it('is still the plain old ending when endless is switched off', () => {
+      // Nothing extra on the answer at all: the win screen has no level to
+      // point at, so it says what it has always said.
+      expect(afterLevel(2, 3, false)).toStrictEqual({ kind: 'game-complete' })
+    })
+  })
 })
 
 describe('bannerText', () => {
@@ -57,6 +90,36 @@ describe('bannerText', () => {
     expect(bannerText({ kind: 'game-complete' }, ['TIME 0:24.6', 'BEST 0:20.1'])).toBe(
       'YOU WIN!\nTIME 0:24.6\nBEST 0:20.1\npress R to play again from level 1',
     )
+  })
+
+  // Once the levels never run out, YOU WIN! is no longer the end of the
+  // evening — it is a doorway into level 4.
+  describe('when the win leads on to a made-up level', () => {
+    it('points at the next level instead of only offering another go', () => {
+      expect(bannerText({ kind: 'game-complete', levelIndex: 3 })).toBe(
+        'YOU WIN!\npress N for level 4\npress R to start over at level 1',
+      )
+    })
+
+    it('still says YOU WIN! and still shows the time', () => {
+      const banner = bannerText({ kind: 'game-complete', levelIndex: 3 }, [
+        'TIME 0:24.6',
+        'NEW BEST TIME!',
+      ])
+
+      expect(banner.startsWith('YOU WIN!\nTIME 0:24.6\nNEW BEST TIME!')).toBe(true)
+    })
+
+    it('asks a phone for a tap, and keeps every line short enough to fit', () => {
+      const banner = bannerText({ kind: 'game-complete', levelIndex: 3 }, ['TIME 0:24.6'], 'touch')
+
+      expect(banner).toBe(
+        'YOU WIN!\nTIME 0:24.6\ntap the screen for level 4\nor tap ↻ to start over',
+      )
+      for (const line of banner.split('\n')) {
+        expect(line.length).toBeLessThanOrEqual(34)
+      }
+    })
   })
 
   // On a phone there is no N and no R, so the banner has to ask for something a

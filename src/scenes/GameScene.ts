@@ -16,7 +16,7 @@ import type { BestTimes } from '../game/timer'
 import { bestTimeFor, finishBannerLines, formatTime, recordTime } from '../game/timer'
 import type { TouchControlId } from '../game/touchControls'
 import type { Level, Platform } from '../levels'
-import { LEVELS } from '../levels'
+import { LEVELS, levelFor } from '../levels'
 import { loadBestTimes, saveBestTimes } from '../storage/bestTimes'
 import { TUNING } from '../tuning'
 import { TouchPad, wantsTouchControls } from './TouchPad'
@@ -95,7 +95,7 @@ export class GameScene extends Phaser.Scene {
 
   /** Which level he's on, counting from 0. Level 0 is the one people call 1. */
   private levelIndex = 0
-  private level: Level = LEVELS[0]
+  private level: Level = levelFor(0)
   /** The score he arrived with, so points keep adding up across levels. */
   private startingPoints = 0
 
@@ -106,7 +106,9 @@ export class GameScene extends Phaser.Scene {
   /** Phaser hands us whatever `scene.restart(...)` was called with. */
   init(data: GameSceneData): void {
     this.levelIndex = data.levelIndex ?? 0
-    this.level = LEVELS[this.levelIndex] ?? LEVELS[0]
+    // Levels 1 to 3 come out of `LEVELS`; anything past them the game makes up
+    // on the spot, the same way every time. Either way it's just a level.
+    this.level = levelFor(this.levelIndex)
     this.startingPoints = data.points ?? 0
   }
 
@@ -183,6 +185,15 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
+   * The page in the record book this level's best time goes on. Our own three
+   * levels are filed under their name, exactly as they always have been; a
+   * made-up level brings its own key with it. See `src/levels/index.ts`.
+   */
+  private get recordKey(): string {
+    return this.level.recordKey ?? this.level.name
+  }
+
+  /**
    * What only works while the big banner is up: N — or a tap anywhere, on a
    * phone — carries the score forward into the next level. (R and ↻ are
    * handled in `update`, because they work at any time.)
@@ -194,14 +205,17 @@ export class GameScene extends Phaser.Scene {
     const bannerSettled = this.time.now - this.bannerShownAt >= TUNING.touch.bannerTapDelayMs
     const tapped = bannerSettled && (this.touchPad?.wasScreenTapped() ?? false)
 
-    if (outcome.kind === 'next-level') {
+    // Every ending with a level behind it, YOU WIN! included — once the levels
+    // don't run out, winning is a doorway rather than a full stop.
+    if (outcome.levelIndex !== undefined) {
       if (justDown(this.nextLevelKey) || tapped) {
         this.scene.restart({ levelIndex: outcome.levelIndex, points: this.scoreState.points })
       }
       return
     }
 
-    // The game is won. There is no next level, so a tap does what R does.
+    // The game is won and that really is the end of it, so a tap does what R
+    // does and starts the whole thing over.
     if (tapped) this.scene.restart({ levelIndex: 0, points: 0 })
   }
 
@@ -612,7 +626,7 @@ export class GameScene extends Phaser.Scene {
     this.refreshHud()
 
     if (isLevelComplete(this.scoreState, this.level.coins.length)) {
-      const outcome = afterLevel(this.levelIndex, LEVELS.length)
+      const outcome = afterLevel(this.levelIndex, LEVELS.length, TUNING.levels.endless)
       this.outcome = outcome
       this.bannerShownAt = this.time.now
       this.player.setVelocity(0, 0)
@@ -622,7 +636,7 @@ export class GameScene extends Phaser.Scene {
 
       // The clock stopped the instant `outcome` was set above, so this is his
       // real time for the level. Only a genuine record gets written down.
-      const result = recordTime(this.bestTimes, this.level.name, this.levelTimeMs)
+      const result = recordTime(this.bestTimes, this.recordKey, this.levelTimeMs)
       if (result.isNewBest) {
         this.bestTimes = result.times
         saveBestTimes(result.times)
@@ -643,7 +657,7 @@ export class GameScene extends Phaser.Scene {
   private refreshHud(): void {
     const total = this.level.coins.length
     this.shownTime = formatTime(this.levelTimeMs)
-    const best = bestTimeFor(this.bestTimes, this.level.name)
+    const best = bestTimeFor(this.bestTimes, this.recordKey)
 
     // Short lines, and only THREE of them. The HUD has to keep out of the way
     // of the player, and it has been in his way twice now: once sideways, when
