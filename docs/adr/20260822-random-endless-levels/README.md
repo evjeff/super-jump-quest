@@ -1,7 +1,7 @@
 # Levels after 3 are generated from the level number
 
 - **Date:** 2026-08-22
-- **Status:** Proposed
+- **Status:** Proposed — built, and waiting to be played. See `tasks.md`.
 
 ## The short version
 
@@ -69,13 +69,17 @@ numbers in `plan.md` are what they are:
 
 ## Documents in this package
 
-- [spec.md](spec.md) `[DRAFT]` - What an endless ladder of random levels has to
-  feel like, which dials get harder, and what must never happen. Read when
-  arguing about scope.
-- [plan.md](plan.md) `[DRAFT]` - The reach maths, what the hand-made levels
-  measure, the dials and how they are derived, the generator's steps, the
-  checker, and how it is all wired in without touching a scene's drawing code.
-  Read before writing any of it — especially §4, which is the argument.
+- [spec.md](spec.md) `[BUILT, NOT YET PLAYED]` - What an endless ladder of random
+  levels has to feel like, which dials get harder, and what must never happen.
+  Read when arguing about scope.
+- [plan.md](plan.md) `[BUILT, NOT YET PLAYED]` - The reach maths, what the
+  hand-made levels measure, the dials and how they are derived, the generator's
+  steps, the checker, and how it is all wired in without touching a scene's
+  drawing code. Read before writing any of it — especially §4, which is the
+  argument.
+- [tasks.md](tasks.md) `[BUILT, NOT YET PLAYED]` - The build as it actually
+  happened, in order, including every place the plan turned out to be wrong and
+  what was done instead. Read to find out what is really in the code.
 
 ## Context
 

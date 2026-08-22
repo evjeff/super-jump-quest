@@ -35,10 +35,19 @@ The clock in the corner times the level you're on and stops when you grab the
 last coin. Your fastest finish on each level is remembered in your browser, so
 there's always a time to beat.
 
-**Three levels.** *First Steps* to learn to jump, *The Tall Tower* to learn to
-aim, and *The Sky Ferry* to learn to wait — its purple ledges slide back and
-forth, and standing on one carries you along with it. The hole in level 3 is too
-wide to jump, even with a triple jump: the ferry is the only way across.
+**Three levels we drew, and then as many as you want.** *First Steps* to learn
+to jump, *The Tall Tower* to learn to aim, and *The Sky Ferry* to learn to wait
+— its purple ledges slide back and forth, and standing on one carries you along
+with it. The hole in level 3 is too wide to jump, even with a triple jump: the
+ferry is the only way across.
+
+Beat level 3 and the game keeps going. **Level 4 onwards the game builds
+itself**, from the level number, and it never runs out. Level 7 is always the
+same level 7 — same ledges, same coins, same made-up name — so best times still
+mean something and "try level 12" is a sentence that works. Every one is built
+by pretending to be Pip and only ever putting the next ledge somewhere he can
+really reach, so there is never a coin you cannot get to. See
+[`docs/adr/20260822-random-endless-levels/`](docs/adr/20260822-random-endless-levels/README.md).
 
 ---
 
@@ -57,6 +66,10 @@ matters, each with a comment explaining what it does:
 | Turn the sound off | `sound.volume` | `0` |
 | Bigger buttons on a phone | `touch.buttonRadius` | `70` |
 | Level 3's moving platforms slower | `platforms.movingSpeed` | `0.5` |
+| A whole new set of made-up levels | `levels.worldSeed` | `2` |
+| A gentler climb through the made-up levels | `levels.ramp` | `16` |
+| Back to the old three-level game | `levels.endless` | `false` |
+| Take the skip button away | `debug.skipLevel` | `false` |
 
 Nothing in that file can break the game. Try ridiculous numbers — that's the fun part.
 
@@ -72,9 +85,11 @@ files, added to the list in [`src/levels/index.ts`](src/levels/index.ts).
 ```
 src/
 ├── tuning.ts        ← all the knobs (start here)
-├── levels/          ← level layouts, as plain data
+├── levels/          ← the hand-drawn levels, as plain data, and the door
+│                      that hands out a made-up one for every number after
 ├── game/            ← the RULES: jumping, scoring, movement, what sounds
-│                      sound like. Pure functions. No Phaser. Unit tested.
+│                      sound like — and the level builder, which is just more
+│                      rules. Pure functions. No Phaser. Unit tested.
 ├── audio/           ← the only thing that makes noise. No sound files —
 │                      the computer plays the notes itself.
 ├── storage/         ← the only thing that remembers anything after you

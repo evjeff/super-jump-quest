@@ -2,15 +2,20 @@
 
 ## Current Status
 
-- **State:** `[IN PROGRESS]`
+- **State:** `[BUILT, NOT YET PLAYED]`
 - **Last updated:** 2026-08-22
-- **Done:** build order steps 1 to 4. `reach.ts`, `levelMeasure.ts`,
-  `levelCheck.ts` and `levelGen.ts` exist with their tests, and §4.2's table
-  below is now what the shipped code measures rather than what a scratch script
-  guessed. Three people then attacked the generator; what they found and what
-  was done about it is at the bottom of §6.
-- **Next action:** Step 5, `levelFor()` and the endless `afterLevel`, so the
-  game really continues past level 3.
+- **Done:** every build-order step in §9 except step 6 — the one only a person
+  can do. `reach.ts`, `levelMeasure.ts`, `levelCheck.ts` and `levelGen.ts` are
+  written and tested; `levelFor()` hands the game a level for any number you
+  ask for; `R`, `Shift+R`, `N` and the two new phone buttons all work; and a
+  browser test skips into level 4 and proves there is really a level there.
+  317 unit tests, 26 browser tests, 100% coverage of `src/game/`.
+  `tasks.md` is the build as it actually happened, including every place this
+  plan turned out to be wrong.
+- **Next action:** **Step 6 — play levels 4, 5, 12 and 25 with the nine-year-old
+  holding the keyboard.** Everything below is a claim about what is *finishable*.
+  Whether it is worth finishing is not something any of these tests can say, and
+  the ADR is deliberately still `Proposed` until somebody has played it.
 
 Read `README.md` for the decisions and `spec.md` for what is being built.
 
@@ -73,11 +78,18 @@ the hop is exactly at the theoretical limit: a jump pressed on the frame he
 leaves the ledge, with no bounce and no squash. Nobody does that twice, so a
 generated level never asks for anything close to it (§4).
 
-## 3. Where the dice come from (`src/game/random.ts`)
+## 3. Where the dice come from (the top of `src/game/levelGen.ts`)
 
 The same four-line generator already at the bottom of `starfield.ts` — an LCG,
 same numbers out for the same seed in. `starfield.ts` keeps its own copy and is
 not touched; four duplicated lines beat refactoring working code.
+
+> **Built where it is used, not in a `src/game/random.ts` of its own.** A third
+> copy of four lines was cheaper than a fourth file — a module of its own would
+> have needed a test file of its own to hold coverage at 100%, to test an LCG
+> that already has two working copies in the repo. Two warm-up draws were added:
+> an LCG's very first number sits close enough to its seed that neighbouring
+> levels started out looking alike.
 
 ```ts
 seed = mix(TUNING.levels.worldSeed, levelNumber)
@@ -152,13 +164,14 @@ would have arrived at level 4.
 > to the reward ledge is four easy hops round the stepping stones, not one lunge
 > that costs four fifths of everything he has.
 >
-> Three numbers in §4.4's L1–L3 columns are still the scratch script's and are
-> due the same treatment when those endpoints are next touched. Measured, they
-> are: **route depth** 5/8/6 (above), **forced rides** 0/0/**10** of 13 — every
-> coin level 3 gives you off a moving deck, not the six that are only over one —
-> and **fall cost** 0/3/3 hops. Level 3's three boarding windows come out at
-> **2.3 s, 4.9 s and 4.0 s** of their six- and seven-second trips, every one of
-> them a one-jump board, which is the calibration T1 wanted.
+> §4.4's L1–L3 columns have since been corrected to what the tape measure says
+> — route depth 5/8/6, forced rides 10 of 13, fall cost 0/3/3, and level 3's
+> boarding windows 2.3 s / 4.9 s / 4.0 s rather than the 1.1 s written here
+> first. **The gentle and limit endpoints beside them were left exactly as they
+> were**, and the shipped `RANGES` in `levelGen.ts` still match them, so two of
+> those endpoints are no longer anchored to the level they were read off. Moving
+> an endpoint moves every level on the ladder and blanks best times, so it is a
+> thing to do deliberately after playing — not a tidy-up. See §4.4.
 
 Two honest caveats about the measurement:
 
@@ -184,21 +197,35 @@ entirely, and it is the family level 3 is built out of.**
 
 ### 4.4 The catalogue
 
-Gentle/limit endpoints marked ✓ are anchored to a measured hand-made level;
-those marked ~ are extrapolations we expect to correct after playing.
+The L1–L3 columns are what `levelMeasure.ts` returns, pinned by its own tests.
+Gentle/limit endpoints marked ✓ are anchored to one of those measurements; those
+marked ~ are extrapolations we expect to correct after playing.
 
 | dial | feels like | drawn? | L1 | L2 | L3 | gentle | limit |
 |---|---|---|---|---|---|---|---|
 | **A1** hardest hop | "that jump is tight" | drawn | .36 | .32 | .24 | .30 ✓ | .60 ~ |
 | **A2** narrowest ledge | "there's nowhere to land" | drawn | 140 | 130 | 120 | 160 ✓ | 90 ~ |
-| **T1** boarding window | "I keep missing the ferry" | drawn | — | — | ~1.1 s | 1.8 s ✓ | 0.7 s ~ |
+| **T1** boarding window | "I keep missing the ferry" | drawn | — | — | 2.3 s | 1.8 s ~ | 0.7 s ~ |
 | **T2** movers on the route | "everything's moving" | drawn | 0 | 0 | 3 | 0 ✓ | 6 ~ |
-| **T3** forced rides | "I can't get there by jumping" | derived | 0 | 0 | 6 of 13 | 0 ✓ | half the coins ~ |
-| **C1** floor solid | "there's no floor left" | drawn | 1.00 | .62 | .48 | 1.00 ✓ | 0.30 ~ |
-| **C2** fall cost | "I lost all that progress" | derived | ~0 hops | 2 hops | 3 hops + a wait | 1 hop ✓ | 6 hops ~ |
+| **T3** forced rides | "I can't get there by jumping" | derived | 0 | 0 | 10 of 13 | 0 ✓ | half the coins ~ |
+| **C1** floor solid | "there's no floor left" | drawn | 1.00 | .63 | .48 | 1.00 ✓ | 0.30 ~ |
+| **C2** fall cost | "I lost all that progress" | derived | 0 hops | 3 hops | 3 hops + a wait | 1 hop ~ | 6 hops ~ |
 | **C3** one-way crossings | "I can't get back" | derived | 0 | 0 | 1 | 0 ✓ | 3 ~ |
 | **L1** coins | "this is taking ages" | drawn | 7 | 11 | 13 | 8 ✓ | 24 ~ |
-| **L2** route depth | "it's a long way up" | drawn | 3 | 5 | 3 | 4 ✓ | 12 ~ |
+| **L2** route depth | "it's a long way up" | drawn | 5 | 8 | 6 | 4 ~ | 12 ~ |
+
+> **Four of those columns moved once the tape measure was real, and two anchors
+> came loose with them.** T1's level 3 was written as ~1.1 s from a hand count
+> and measures 2.3 s; T3 was 6 of 13 and is 10 (level 3 hands you almost every
+> coin off a moving deck, not merely the ones over the hole); C2's level 2 was 2
+> hops and is 3; L2 was 3/5/3 and is 5/8/6, because the measurement counts the
+> drop off the spot he starts in and takes the *kindest* route rather than the
+> shortest. **The gentle endpoints for T1, C2 and L2 were left where they were**
+> — they now sit slightly *harder* than the level they claimed to be anchored to,
+> which is why they are marked ~. Correcting them changes every generated level
+> and blanks every generated best time (§7), so it belongs to a deliberate pass
+> after step 6, not to a measurement tidy-up. The shipped `RANGES` in
+> `levelGen.ts` are exactly this table's last two columns.
 
 **Derived, not drawn — the part the old table got wrong.** The dials are not
 independent and cannot be rolled separately:
@@ -310,8 +337,10 @@ boarding window is the row still moving at level 203.
 
 ## 5. How a level is built (`src/game/levelGen.ts`)
 
-Six steps, in the derivation order from §4.4. No loop that can fail to
-terminate, nothing thrown away *inside* a level.
+Eight steps, in the derivation order from §4.4. No loop that can fail to
+terminate, nothing thrown away *inside* a level. (The plan had six; the built
+version splits the floor from the things that cross it, and adds a final
+re-timing pass — **h** — that the plan did not see coming.)
 
 **a. Draw the dials** for this level number: `d`, the weights, the job.
 
@@ -319,24 +348,49 @@ terminate, nothing thrown away *inside* a level.
 whether there is a ferry to spend on it.
 
 **c. Lay the floor** (C1): ground pieces totalling the solid fraction, with 1–4
-gaps, each one marked jumpable, bridged or ferried.
+gaps, each one marked jumpable, bridged or ferried. A hole under 120 wide is a
+crack you step over rather than a hole, so a level whose whole share of missing
+floor comes to less than that keeps its floor in one piece, the way level 1
+does. A hole is only marked *ferried* when a ferry is certain to fit in it.
 
-**d. Walk the route** (L2, A1, A2). Stand where Pip stands. Repeatedly draw a
+**d. Cross the holes.** A bridged hole gets a still ledge standing in it; a
+ferried one gets a sliding deck. Both are sized so that **both banks stay inside
+one jump however the dice land** — the bridge pays for its own sideways nudge up
+front, which the first version did not, and one hole in every twelve tries came
+out uncrossable because of it.
+
+**e. Walk the route** (L2, A1, A2). Stand where Pip stands. Repeatedly draw a
 next-ledge offset from inside the envelope at cost ≈ A1, keep it on screen and
 clear of what is placed, place it. If a candidate fails, shrink toward a
 known-safe hop and retry — bounded attempts, then take the safe hop. **The route
 exists because the level was built along it.**
 
-**e. Turn chosen links into movers** (T1). Each mover's `moves` block is chosen
+**f. Turn chosen links into movers** (T1). Each mover's `moves` block is chosen
 so that its home end is within a reachable hop of the previous anchor and *stays
 there long enough to board*, and its far end is within a hop of the next anchor.
 The window is computed from `platformPosition` — the real function the game runs,
-not an approximation — and level 3's ferry (~1.1 s, judged fair for a
-first-timer) is the calibration. And never park a deck above the previous
-anchor: *"a platform you are standing under is a ceiling, not a lift"*, a comment
-in `level3.ts` that cost three attempts to earn.
+not an approximation — and level 3's tightest ferry (**2.3 s**, judged fair for a
+first-timer when it was hand-built) is the calibration. And never park a deck
+above the previous anchor: *"a platform you are standing under is a ceiling, not
+a lift"*, a comment in `level3.ts` that cost three attempts to earn.
 
-**f. Hang the coins** (L1, T3), then name the level from two short word lists.
+**g. Hang the coins** (L1, T3), then name the level from two short word lists.
+
+**h. Time the ferries again, with the tape measure rather than the plan.** This
+step is not in the design above and the levels are wrong without it. Step **f**
+sizes each window for a jump from *the ledge the builder had in mind*;
+`measureLevel` then walks the finished level and often finds a kinder place to
+jump from, further away, where the same ferry is harder to catch — which turned
+four levels between 4 and 200 broken, with windows of 0.7–1.0 s against a 1.6 s
+design. The correction is exact, not a search: the length of the chance is the
+trip time times the slice of the trip the deck is in reach for, and that slice
+does not depend on the trip time, so one scaling of the trip lands it on target.
+
+**A ferry that is the only way over a hole is held to a longer window than T1
+asks for** — at least 1.6 s, where `levelCheck`'s fairness line is 1.0 s and
+T1's own limit is 0.7 s. A 0.7-second window is a fine thing to ask of a lift
+you can wait for again; asking it of the only way across the level makes a level
+that is broken rather than hard.
 
 Two things nothing may be built in, and both are about the size of a body
 rather than the size of a jump. **Pip is 48 tall, so a deck needs 48 of clear
@@ -452,6 +506,13 @@ than quietly changed:
 - *level 4 is not much of a breather* — 19 coins where `spec.md` promised seven
   or eight, and a ferry. The coin dial's gentle end (8) is not what the budget
   actually hands level 4.
+- *coins behind the HUD* — there is a keep-out rule for the phone's buttons and
+  none for the three lines of writing in the top-left corner. About 65 coins in
+  levels 4–40 land inside roughly (16, 14)–(500, 83), level 5's *Star Wait*
+  among them. It is a one-line addition to `CHECKS` plus a keep-out in
+  `aGoodSpotForACoin` — but adding **any** rule reshapes levels and blanks their
+  best times (§7), so it belongs in a batch of rule changes made deliberately,
+  not in the step that was meant to be writing documentation.
 - *`generateLevel(Number.POSITIVE_INFINITY)` never returns* — `jobFor` replays
   the job chain from level 4 every time it is called, so it costs more the
   higher the level, and asking for level Infinity spins forever. Not reachable
@@ -531,6 +592,14 @@ record disappeared, so checker changes are worth batching rather than dribbling.
 `GameScene` passes `level.recordKey ?? level.name` to `recordTime` /
 `bestTimeFor`. That is the whole change to the timer.
 
+> **Built in `levelFor()`, not in `generateLevel()`.** The generator returns a
+> plain `Level` and knows nothing about the record book; `src/levels/index.ts`
+> stamps the key on as it hands the level over. The key is
+> `level-<number>-<base36 hash>` — the number so a record book opened in
+> devtools can be read, and the hash over `playerStart`, every platform (x, y,
+> width, height and the whole `moves` block) and every coin. **Not the name**,
+> so a level that only drew different words keeps its record.
+
 ## 8. Endless, and the two new buttons
 
 `afterLevel(finishedIndex, levelCount)` gains the endless case: past the last
@@ -607,3 +676,8 @@ debug: {
 Steps 1–3 are worth having even if the rest is abandoned: "is this level
 finishable, and where is its hardest jump" is a useful thing to ask about a
 hand-made level too.
+
+**What actually happened is in [`tasks.md`](tasks.md)**, step by step, including
+the order that changed (7 and 8 were done before 6, because the buttons are how
+you get to level 12 to play it) and every place this plan turned out to be
+wrong. Step 6 — playing it — is the one still open.

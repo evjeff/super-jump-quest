@@ -2,10 +2,27 @@
 
 ## Current Status
 
-- **State:** `[DRAFT]`
+- **State:** `[BUILT, NOT YET PLAYED]`
 - **Last updated:** 2026-08-22
-- **Next action:** Agree the dials and the never-allowed list, then write
-  `plan.md`'s reach maths as a test before any generator code exists.
+- **Done:** all of it, in code. Levels 1–3 are untouched, the game runs on past
+  level 3 forever, level 7 is always level 7, every *broken* rule holds over
+  levels 4–200 with no re-roll needed, and both new buttons work on a keyboard
+  and on a phone. Levels 1 and 3 come back clean from the checker; level 2 has
+  one true finding, left alone on purpose (see *Must have*). The checker's first
+  two *dull* rules are the two he named, and they throw away none of the first
+  drafts between levels 4 and 200 — which is the number to watch: a rule that
+  rejects more than about a quarter is a bug, and a rule that rejects nothing
+  may be a rule that never bites.
+- **Known divergence, to settle by playing:** point 1 below promises level 4 is
+  "seven or eight coins". It comes out with about nineteen. The curve in
+  `plan.md` §4.6 — written after measuring the hand-made levels — hands level 4
+  fourteen or more, and the curve won the argument in code. Whether *that* is
+  still "a breather after the ferry level" is a question for someone holding the
+  keyboard, not for a test.
+- **Next action:** the last line of *How we will know it works* — **a person
+  plays levels 4, 5, 12 and 25**, with the nine-year-old holding the keyboard.
+  Every other line on that list is now checked automatically. The ADR stays
+  `Proposed` until that happens.
 
 ## The ask
 
@@ -65,6 +82,17 @@ Two feelings to protect:
   someone playing should be able to become a rule in one sitting.
 - The checker reads hand-made levels too, and **levels 1, 2 and 3 must pass every
   *broken* rule**. A rule that rejects level 3 is a wrong rule.
+
+  > **Built, and level 2 does not pass.** Levels 1 and 3 come back completely
+  > clean — nothing broken, nothing dull. Level 2 has exactly one finding, and
+  > it is a true one: its free coin, the one right where you start, sits nine
+  > pixels from the middle of where a phone draws ▶. On a phone that coin is
+  > under your own thumb. It has been there since level 2 was built, it is
+  > exactly what `plan.md` §9 guessed this tool would find, and **it is left
+  > alone on purpose** — levels 1–3 are not to be touched by this work, and
+  > moving that coin is somebody's deliberate decision about a hand-made level.
+  > `levelCheck.test.ts` asserts the finding as it stands today, with a comment
+  > saying so, so fixing the coin turns that test red on purpose.
 - Difficulty rises with the level number, with randomness on top, across four
   families of dial — measuring levels 1–3 says these are different kinds of hard,
   not one kind (see `plan.md` §4):
@@ -161,7 +189,8 @@ a bug, and the test suite reports that number for every rule.
 **The checker, run over levels 1–3.** Every hand-made level passes every *broken*
 rule, and the numbers it measures for them match what is written in `plan.md`
 §4.2. This is the calibration for the whole difficulty curve; if it drifts, the
-curve is describing levels nobody has played.
+curve is describing levels nobody has played. *Done, and it found one real thing
+in level 2 — see the note above.*
 
 **Cheap tests over hundreds of levels** (`src/game/`, Vitest, no browser). For
 every level from 4 to 200:
