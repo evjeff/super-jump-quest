@@ -360,7 +360,11 @@ function weightsFor(dice: Dice, job: DialName): Dials {
 
   const weights = {} as Dials
   for (const [rank, name] of [job, ...rest].entries()) {
-    weights[name] = (SPIKE[rank] as number) * (drawn.get(name) as number)
+    // Add an eighth dial one day and there is no eighth share to give it. The
+    // last share is the right thing to hand it — it is the most refunded one,
+    // so a new dial arrives quietly rather than by shouting over the others.
+    const share = SPIKE.at(rank) ?? SPIKE[SPIKE.length - 1]
+    weights[name] = (share as number) * (drawn.get(name) as number)
   }
 
   return weights

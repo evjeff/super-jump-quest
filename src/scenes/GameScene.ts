@@ -726,7 +726,27 @@ function anyKeyDown(keys: Phaser.Input.Keyboard.Key[]): boolean {
   return keys.some((key) => key.isDown)
 }
 
-/** Did this key go down this frame? A key that doesn't exist never does. */
+/**
+ * Did this key go down this frame? A key that doesn't exist never does.
+ *
+ * A finger resting on a key is not one press. The browser sends "it went down"
+ * over and over while you lean on it — twenty-odd times a second — and each of
+ * those carries a flag saying it is a repeat rather than a new press.
+ *
+ * Normally Phaser sorts this out for us: it can see the key is already down, so
+ * the repeats change nothing. But R and N both restart the scene, and a restart
+ * throws away every key and builds new ones that believe they are up. So the
+ * very next repeat looks like somebody pressing the key for the first time, and
+ * the level restarts again, and again — leaning on N walked him from level 1 to
+ * level 25 in a second and a bit, and leaning on R pinned him to his starting
+ * spot with the clock stuck at zero, which looks exactly like the game freezing.
+ *
+ * Ignoring the repeats fixes both. The phone has been protected from this since
+ * the touch buttons were built (`justPressed` in `src/game/touchControls.ts`);
+ * this is the keyboard's half of the same promise.
+ */
 function justDown(key: Phaser.Input.Keyboard.Key | null): boolean {
-  return key !== null && Phaser.Input.Keyboard.JustDown(key)
+  if (key === null || !Phaser.Input.Keyboard.JustDown(key)) return false
+  const pressed = key.originalEvent as KeyboardEvent | undefined
+  return pressed?.repeat !== true
 }

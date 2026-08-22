@@ -9,6 +9,7 @@ import {
   levelShape,
   levelTimeMs,
   playerIsGrounded,
+  playerX,
   playerY,
   waitForGameScene,
   watchForErrors,
@@ -899,6 +900,69 @@ async function skipToLevel(page: import('@playwright/test').Page, level: number)
     await holdKey(page, 'KeyN')
     await expect.poll(() => hud(page), { timeout: 5_000 }).toContain(`LEVEL ${next}`)
   }
+}
+
+test('leaning on N skips one level, not forty', async ({ page }) => {
+  await page.goto('/')
+  await waitForGameScene(page)
+  await expect.poll(() => hud(page), { timeout: 10_000 }).toContain('LEVEL 1')
+
+  // Nobody taps a key for one frame. A child rests a finger on it — and the
+  // browser then sends "N went down" over and over, twenty-odd times a second,
+  // for as long as the finger is there.
+  //
+  // Restarting the scene throws away the key object and builds a new one, so
+  // every one of those repeats can look like a brand-new press unless someone
+  // says otherwise. Without that, a resting finger walks him into level 40 and
+  // he has lost his place completely.
+  //
+  // The phone has been protected from exactly this since the touch buttons
+  // were built — see "leaning on ↻ starts the game over once" in touch.spec.ts.
+  // This is the keyboard's half of the same promise.
+  await leanOn(page, 'KeyN')
+
+  // Note the word boundary. "LEVEL 2" on its own also matches "LEVEL 25",
+  // which is roughly where a leaned-on N used to leave him.
+  await expect.poll(() => hud(page), { timeout: 5_000 }).toMatch(/LEVEL 2\b/)
+})
+
+test('leaning on R plays the level again once, and lets him get on with it', async ({ page }) => {
+  await page.goto('/')
+  await waitForGameScene(page)
+  await expect.poll(() => playerIsGrounded(page), { timeout: 10_000 }).toBe(true)
+
+  // Read the clock while the key is still held down. If every repeat restarted
+  // the level, the clock is being wound back to zero twenty times a second and
+  // he is pinned to his starting spot — which, to the person holding the key,
+  // is indistinguishable from the game having frozen.
+  const clockWhileHeld = await leanOn(page, 'KeyR', () => levelTimeMs(page))
+  expect(clockWhileHeld).toBeGreaterThan(500)
+
+  await holdKey(page, 'ArrowRight')
+  await page.waitForTimeout(200)
+  expect(await playerX(page)).toBeGreaterThan(80)
+})
+
+/**
+ * Hold a key down the way a child does, repeats and all.
+ *
+ * A real browser does not send ONE "key went down" when you rest a finger on a
+ * key — it sends a stream of them, twenty-odd a second, each marked as a
+ * repeat. `keyboard.down` on its own sends a single one, which is not what a
+ * resting finger looks like, so holding it that way tests nothing.
+ */
+async function leanOn<T>(
+  page: import('@playwright/test').Page,
+  key: string,
+  whileHeld?: () => Promise<T>,
+): Promise<T | undefined> {
+  for (let press = 0; press < 24; press += 1) {
+    await page.keyboard.down(key)
+    await page.waitForTimeout(50)
+  }
+  const measured = await whileHeld?.()
+  await page.keyboard.up(key)
+  return measured
 }
 
 /** The same, with SHIFT held down over the top of it. */
