@@ -48,17 +48,63 @@ export const TUNING = {
 
   platforms: {
     /**
-     * How fast the moving platforms in level 3 go — all of them at once.
+     * How fast every sliding platform goes — level 3's, and every ferry in
+     * every made-up level, all of them at once.
      *
-     * 1 is normal. 0.5 is half speed, which makes level 3 much kinder. 2 is
-     * twice as fast. 0 freezes every moving platform where it starts, which
-     * turns level 3 into an ordinary level.
+     * 1 is normal. 0.5 is half speed, which makes level 3 much kinder and gives
+     * you twice as long to hop on to a ferry anywhere else. 0 freezes the lot
+     * where they start, which turns level 3 into an ordinary level.
      *
-     * How far each one travels, and how long its own trip takes, is in
-     * `src/levels/level3.ts` — that's the level's DESIGN. This knob is for
+     * Turning it UP makes every ferry harder to catch, and the made-up levels
+     * know it: past about 2.5 there is no chance long enough to be fair, so
+     * they stop putting ferries over holes and cross them another way instead.
+     * You will see fewer sliding ledges, not impossible ones.
+     *
+     * How far level 3's platforms travel, and how long each trip takes, is in
+     * `src/levels/level3.ts` — that's that level's DESIGN. This knob is for
      * "that's too hard for me today" without opening a level file.
      */
     movingSpeed: 1,
+  },
+
+  /**
+   * WHERE LEVELS COME FROM once you've played the ones we drew.
+   *
+   * Levels 1, 2 and 3 are ours — somebody put every single ledge where it is.
+   * Everything after them the game makes up for itself, and it never runs out.
+   */
+  levels: {
+    /**
+     * Does the game keep going after level 3?
+     *
+     * true = you beat level 3, get YOU WIN! for it, and then walk straight on
+     * into level 4, level 5, level 500. false = the old three-level game,
+     * exactly as it was: YOU WIN! and that's the evening.
+     */
+    endless: true,
+
+    /**
+     * The one number every made-up level is grown from.
+     *
+     * Level 12 is the same level 12 on every computer, today and next
+     * Saturday — same ledges, same coins, same name — which is what makes
+     * "try level 12, it's the one with the huge hole" mean anything.
+     *
+     * Change this number and EVERY level past 3 becomes a different level: a
+     * whole new set of them to play. Try 7. Change it back to 1 and the old
+     * ones come back exactly as they were, best times and all.
+     */
+    worldSeed: 1,
+
+    /**
+     * How quickly the made-up levels turn nasty.
+     *
+     * Bigger = a gentler climb, so it takes many more levels before the holes
+     * get wide, the ledges get small and the ferries get fussy. 8 means level
+     * 10 is a step up from level 4 and level 100 is properly hard. Try 25 for
+     * a long, kind ladder, or 3 if he wants a fight by level 8.
+     */
+    ramp: 8,
   },
 
   coins: {
@@ -99,14 +145,21 @@ export const TUNING = {
     /** JUMP, bottom right. It's the one you press most, so it's the biggest. */
     jumpButtonRadius: 60,
 
-    /** The little ↻ start-over button, up in the far corner away from thumbs. */
+    /**
+     * The little buttons in a row along the top, away from both thumbs: ↻
+     * start the whole game over, ↺ play this level again, ⏭ skip it. All three
+     * are this size — small on purpose, so brushing the top of the screen
+     * misses them. Try 26 if a finger keeps missing.
+     */
     restartButtonRadius: 22,
 
     /** How far in from the edge of the screen the buttons sit. */
     edgeMargin: 24,
 
     /**
-     * The gap between ◀ and ▶. Bigger if a thumb keeps catching both at once.
+     * The gap between two buttons that sit side by side — ◀ and ▶ at the
+     * bottom, and the three little ones along the top. Bigger if a thumb keeps
+     * catching both at once.
      */
     directionGap: 12,
 
@@ -137,6 +190,20 @@ export const TUNING = {
 
     /** Fall below this and you respawn at the start. */
     deathDepth: 700,
+  },
+
+  /**
+   * Switches for the grown-up, not for how the game feels. Everything here is
+   * a way of getting AROUND playing the game properly.
+   */
+  debug: {
+    /**
+     * The skip button: leave a level you're stuck on without finishing it.
+     *
+     * A skipped level never sets a best time — you didn't really play it.
+     * Turn this off and every level has to be earned.
+     */
+    skipLevel: true,
   },
 
   /** The stars in the night sky. Their colour is `colors.night.star`. */

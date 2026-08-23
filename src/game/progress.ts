@@ -9,22 +9,47 @@
 export type Progress =
   /** There's more to play. `levelIndex` is the level to load (0 = the first). */
   | { kind: 'next-level'; levelIndex: number }
-  /** That was the last one. Roll the fanfare. */
-  | { kind: 'game-complete' }
+  /**
+   * You beat the levels we drew by hand. Roll the fanfare.
+   *
+   * `levelIndex` is there when the game doesn't stop afterwards: it's the
+   * first made-up level, waiting on the other side of the YOU WIN!. Left out
+   * altogether when that really is the end of the game.
+   */
+  | { kind: 'game-complete'; levelIndex?: number }
 
 /**
- * You just finished the level at `finishedIndex`, out of `levelCount` levels.
+ * You just finished the level at `finishedIndex`, out of `levelCount`
+ * hand-made levels.
  *
  * Levels are numbered from 0 inside the code, so finishing level 0 (the one a
  * person calls "level 1") hands you level 1 (the one a person calls "level 2").
+ *
+ * `endless` is `TUNING.levels.endless`. Leave it off and this is the old
+ * three-level game, right down to the last full stop: you finish level 3 and
+ * that's it.
+ *
+ * Turn it on and the game never runs out — but beating level 3 is STILL a win.
+ * It's the last level anybody drew by hand, and finishing it deserves the
+ * fanfare it has always had. So the answer is "you win, AND here is level 4",
+ * and the banner says both. After that it's ordinary levels all the way.
  *
  * A level number that doesn't exist counts as finishing the game. That can't
  * happen from playing, but "you win" is a much kinder answer than trying to
  * load a level that isn't there.
  */
-export function afterLevel(finishedIndex: number, levelCount: number): Progress {
+export function afterLevel(finishedIndex: number, levelCount: number, endless = false): Progress {
   const nextIndex = finishedIndex + 1
-  if (finishedIndex < 0 || nextIndex >= levelCount) return { kind: 'game-complete' }
+  if (finishedIndex < 0) return { kind: 'game-complete' }
+
+  if (!endless) {
+    if (nextIndex >= levelCount) return { kind: 'game-complete' }
+    return { kind: 'next-level', levelIndex: nextIndex }
+  }
+
+  // The one moment that is both at once: the hand-made levels are finished,
+  // and there is more.
+  if (nextIndex === levelCount) return { kind: 'game-complete', levelIndex: nextIndex }
   return { kind: 'next-level', levelIndex: nextIndex }
 }
 
@@ -50,21 +75,25 @@ export function bannerText(
   extraLines: string[] = [],
   controls: ControlHint = 'keys',
 ): string {
-  const lines =
-    progress.kind === 'game-complete'
-      ? ['YOU WIN!', ...extraLines, playAgainLine(controls)]
-      : [
-          `LEVEL ${progress.levelIndex} DONE!`,
-          ...extraLines,
-          ...nextLevelLines(progress.levelIndex + 1, controls),
-        ]
-  return lines.join('\n')
+  const headline =
+    progress.kind === 'game-complete' ? 'YOU WIN!' : `LEVEL ${progress.levelIndex} DONE!`
+
+  // Every ending except the true one — the last hand-made level with nothing
+  // past it — has somewhere to go next, and says so.
+  const ending =
+    progress.levelIndex === undefined
+      ? [playAgainLine(controls)]
+      : nextLevelLines(progress.levelIndex + 1, controls)
+
+  return [headline, ...extraLines, ...ending].join('\n')
 }
 
 function playAgainLine(controls: ControlHint): string {
   // Short for the same reason as the lines below: see the note there.
   if (controls === 'touch') return 'tap to play again from level 1'
-  return 'press R to play again from level 1'
+  // This is the end of the game, so the offer is the whole game again — and
+  // that is SHIFT+R now. Plain R would only replay the level you just won.
+  return 'press SHIFT+R to start over'
 }
 
 function nextLevelLines(nextLevelNumber: number, controls: ControlHint): string[] {
@@ -74,9 +103,13 @@ function nextLevelLines(nextLevelNumber: number, controls: ControlHint): string[
   // Kept short on purpose. The banner is drawn as one lump of 40px monospace,
   // centred, and it does not wrap: at that size 34 characters is already the
   // full 960 of the screen, and anything longer is simply cut off at BOTH ends.
-  // `progress.test.ts` holds every touch line to that limit.
+  // `progress.test.ts` holds every line to that limit.
   if (controls === 'touch') {
     return [`tap the screen for level ${nextLevelNumber}`, 'or tap ↻ to start over']
   }
-  return [`press N for level ${nextLevelNumber}`, 'press R to start over at level 1']
+  // The second line used to offer the whole game over again. Nobody wanted
+  // that here: you have just finished a level, and the thing you want is
+  // another go at the one you nearly beat the record on. Starting over is
+  // still there — it is SHIFT+R — but it isn't what the banner offers.
+  return [`press N for level ${nextLevelNumber}`, 'press R to play this level again']
 }

@@ -33,7 +33,21 @@ function distance(a: TouchButton, b: TouchButton): number {
 
 describe('touchButtonLayout', () => {
   it('lays out one button for each control', () => {
-    expect(LAYOUT.map((entry) => entry.id).sort()).toEqual(['jump', 'left', 'restart', 'right'])
+    expect(LAYOUT.map((entry) => entry.id).sort()).toEqual([
+      'jump',
+      'left',
+      'playAgain',
+      'restart',
+      'right',
+      'skip',
+    ])
+  })
+
+  it('gives every button its own symbol', () => {
+    // Three little rings in a row along the top only work if you can tell them
+    // apart at a glance: ↻ start over, ↺ this level again, ⏭ skip it.
+    const labels = LAYOUT.map((entry) => entry.label)
+    expect(new Set(labels).size).toBe(labels.length)
   })
 
   it('keeps every button fully on the screen', () => {
@@ -85,6 +99,64 @@ describe('touchButtonLayout', () => {
     expect(restart.x).toBeGreaterThan(OPTIONS.width / 2)
     // Small, so an accidental brush of the corner misses it.
     expect(restart.radius).toBeLessThan(button('left').radius)
+  })
+
+  it('lines the three little buttons up along the top, out of both thumbs’ way', () => {
+    for (const entry of [button('restart'), button('playAgain'), button('skip')]) {
+      expect(entry.y).toBe(button('restart').y)
+      expect(entry.radius).toBe(OPTIONS.restartRadius)
+      // Top half, right half: the score and the clock are drawn top-LEFT, and
+      // the whole button has to be clear of them, not just its middle.
+      expect(entry.y).toBeLessThan(OPTIONS.height / 2)
+      expect(entry.x - entry.radius).toBeGreaterThan(OPTIONS.width / 2)
+    }
+  })
+
+  it('keeps start-over in the far corner, with the two new ones inside it', () => {
+    // ↻ has always been the corner one and has always meant the same thing.
+    // Moving it would mean a thumb that knows where to go finding a different
+    // button under it.
+    expect(button('restart').x).toBeGreaterThan(button('playAgain').x)
+    expect(button('playAgain').x).toBeGreaterThan(button('skip').x)
+  })
+
+  it('leaves a gap between the little buttons, so one press is one button', () => {
+    const pairs: [TouchButton, TouchButton][] = [
+      [button('restart'), button('playAgain')],
+      [button('playAgain'), button('skip')],
+    ]
+
+    for (const [a, b] of pairs) {
+      expect(distance(a, b) - a.radius - b.radius).toBeGreaterThanOrEqual(OPTIONS.directionGap)
+    }
+  })
+
+  it('leaves the skip button out when skipping is switched off', () => {
+    const without = touchButtonLayout({ ...OPTIONS, showSkip: false })
+
+    expect(without.map((entry) => entry.id).sort()).toEqual([
+      'jump',
+      'left',
+      'playAgain',
+      'restart',
+      'right',
+    ])
+  })
+
+  it('leaves every other button exactly where it was when skipping is off', () => {
+    // Switching skipping off must not shuffle the buttons a thumb already
+    // knows the place of.
+    for (const entry of touchButtonLayout({ ...OPTIONS, showSkip: false })) {
+      expect(entry).toEqual(button(entry.id))
+    }
+  })
+
+  it('keeps the skip button’s spot by default', () => {
+    // The level-maker asks this same question when it decides where NOT to put
+    // a coin. If switching the skip button off took its spot away, every
+    // made-up level would quietly come out a different shape — and every best
+    // time with it. So the spot is kept unless somebody asks for it not to be.
+    expect(LAYOUT.some((entry) => entry.id === 'skip')).toBe(true)
   })
 
   it('moves the buttons with the screen size', () => {
@@ -142,6 +214,15 @@ describe('pressedButtons', () => {
     expect(pressed).toEqual(new Set(['left', 'jump']))
   })
 
+  it('tells the little top buttons apart', () => {
+    // They sit side by side, so a finger on ↺ must not also press ↻ and throw
+    // the whole run away.
+    const playAgain = button('playAgain')
+    expect(pressedButtons(LAYOUT, [{ x: playAgain.x, y: playAgain.y }])).toEqual(
+      new Set(['playAgain']),
+    )
+  })
+
   it('counts two fingers on the same button once', () => {
     const pressed = pressedButtons(LAYOUT, [
       { x: jump.x, y: jump.y },
@@ -178,6 +259,12 @@ describe('justPressed', () => {
   it('fires again after a real second press', () => {
     expect(justPressed(new Set(['jump']), none, 'jump')).toBe(false)
     expect(justPressed(none, new Set(['jump']), 'jump')).toBe(true)
+  })
+
+  it('skips one level per press, however long the thumb stays there', () => {
+    // Leaning on ⏭ must not skip level after level after level.
+    expect(justPressed(none, new Set(['skip']), 'skip')).toBe(true)
+    expect(justPressed(new Set(['skip']), new Set(['skip']), 'skip')).toBe(false)
   })
 
   it('does not confuse one button for another', () => {

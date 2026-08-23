@@ -16,12 +16,12 @@ import type { BestTimes } from '../game/timer'
 import { bestTimeFor, finishBannerLines, formatTime, recordTime } from '../game/timer'
 import type { TouchControlId } from '../game/touchControls'
 import type { Level, Platform } from '../levels'
-import { LEVELS } from '../levels'
+import { LEVELS, levelFor } from '../levels'
 import { loadBestTimes, saveBestTimes } from '../storage/bestTimes'
 import { TUNING } from '../tuning'
 import { TouchPad, wantsTouchControls } from './TouchPad'
 
-/** What one level hands to the next when you press N. */
+/** What one level hands to the next: which level, and the score to carry in. */
 interface GameSceneData {
   levelIndex?: number
   points?: number
@@ -95,7 +95,7 @@ export class GameScene extends Phaser.Scene {
 
   /** Which level he's on, counting from 0. Level 0 is the one people call 1. */
   private levelIndex = 0
-  private level: Level = LEVELS[0]
+  private level: Level = levelFor(0)
   /** The score he arrived with, so points keep adding up across levels. */
   private startingPoints = 0
 
@@ -106,7 +106,9 @@ export class GameScene extends Phaser.Scene {
   /** Phaser hands us whatever `scene.restart(...)` was called with. */
   init(data: GameSceneData): void {
     this.levelIndex = data.levelIndex ?? 0
-    this.level = LEVELS[this.levelIndex] ?? LEVELS[0]
+    // Levels 1 to 3 come out of `LEVELS`; anything past them the game makes up
+    // on the spot, the same way every time. Either way it's just a level.
+    this.level = levelFor(this.levelIndex)
     this.startingPoints = data.points ?? 0
   }
 
@@ -154,13 +156,32 @@ export class GameScene extends Phaser.Scene {
     // frozen mid-squash.
     this.drawPlayer()
 
-    // R — or the ↻ button on a phone — always means the same thing, wherever
-    // you press it: back to the very beginning, score and all. Checked before
-    // anything else so a kid stuck on a hard jump can start over without
-    // reloading the page, and so that pressing ↻ on the finish banner starts
-    // the game over rather than counting as a "tap to carry on".
-    if (justDown(this.restartKey) || this.touchTapped('restart')) {
+    // R — or ↺ on a phone — plays THIS level again, exactly as he arrived at
+    // it: the coins are back, the clock is at zero, and the score is the one he
+    // walked in with. It's the button a child reaches for twenty times more
+    // often than the other one, which is why it's the one with no SHIFT on it.
+    //
+    // SHIFT+R — or ↻ — is the big one: back to the very beginning, score and
+    // all.
+    //
+    // Both are checked before anything else, so a kid stuck on a hard jump can
+    // start again without reloading the page, and so that pressing one of them
+    // on the finish banner does what it says rather than counting as a "tap to
+    // carry on".
+    //
+    // `justDown` is asked ONCE and the answer kept: asking a key whether it
+    // just went down is also what marks it as answered, so a second ask in the
+    // same frame always says no.
+    const restartPressed = justDown(this.restartKey)
+    const withShift = this.restartKey?.shiftKey ?? false
+
+    if ((restartPressed && withShift) || this.touchTapped('restart')) {
       this.scene.restart({ levelIndex: 0, points: 0 })
+      return
+    }
+
+    if ((restartPressed && !withShift) || this.touchTapped('playAgain')) {
+      this.scene.restart({ levelIndex: this.levelIndex, points: this.startingPoints })
       return
     }
 
@@ -169,6 +190,26 @@ export class GameScene extends Phaser.Scene {
     if (this.outcome) {
       this.handleBannerInput(this.outcome)
       return
+    }
+
+    // N — or ⏭ on a phone — is the way out of a level that is beating you: it
+    // hands you the next one without you having to finish this one.
+    //
+    // Skipping is not winning, and the record book knows the difference: no
+    // time is written down on the way out, because he didn't really play it.
+    // The coins he did pick up he keeps.
+    //
+    // `TUNING.debug.skipLevel` is what turns the whole thing off, key and
+    // button together — it's there "for now", and it leaves by one number
+    // going false.
+    if (TUNING.debug.skipLevel && (justDown(this.nextLevelKey) || this.touchTapped('skip'))) {
+      const skipTo = afterLevel(this.levelIndex, LEVELS.length, TUNING.levels.endless)
+      // Nowhere to skip TO, on the last level of a game that ends. Then the
+      // only way past it is to play it.
+      if (skipTo.levelIndex !== undefined) {
+        this.scene.restart({ levelIndex: skipTo.levelIndex, points: this.scoreState.points })
+        return
+      }
     }
 
     this.advanceTimer(delta)
@@ -183,9 +224,19 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
+   * The page in the record book this level's best time goes on. Our own three
+   * levels are filed under their name, exactly as they always have been; a
+   * made-up level brings its own key with it. See `src/levels/index.ts`.
+   */
+  private get recordKey(): string {
+    return this.level.recordKey ?? this.level.name
+  }
+
+  /**
    * What only works while the big banner is up: N — or a tap anywhere, on a
-   * phone — carries the score forward into the next level. (R and ↻ are
-   * handled in `update`, because they work at any time.)
+   * phone — carries the score forward into the next level. (R, SHIFT+R and the
+   * buttons along the top are handled in `update`, because they work at any
+   * time.)
    */
   private handleBannerInput(outcome: Progress): void {
     // A tap only counts once the banner has been up a moment. Winning tends to
@@ -194,14 +245,17 @@ export class GameScene extends Phaser.Scene {
     const bannerSettled = this.time.now - this.bannerShownAt >= TUNING.touch.bannerTapDelayMs
     const tapped = bannerSettled && (this.touchPad?.wasScreenTapped() ?? false)
 
-    if (outcome.kind === 'next-level') {
+    // Every ending with a level behind it, YOU WIN! included — once the levels
+    // don't run out, winning is a doorway rather than a full stop.
+    if (outcome.levelIndex !== undefined) {
       if (justDown(this.nextLevelKey) || tapped) {
         this.scene.restart({ levelIndex: outcome.levelIndex, points: this.scoreState.points })
       }
       return
     }
 
-    // The game is won. There is no next level, so a tap does what R does.
+    // The game is won and that really is the end of it, so a tap does what R
+    // does and starts the whole thing over.
     if (tapped) this.scene.restart({ levelIndex: 0, points: 0 })
   }
 
@@ -612,17 +666,18 @@ export class GameScene extends Phaser.Scene {
     this.refreshHud()
 
     if (isLevelComplete(this.scoreState, this.level.coins.length)) {
-      const outcome = afterLevel(this.levelIndex, LEVELS.length)
+      const outcome = afterLevel(this.levelIndex, LEVELS.length, TUNING.levels.endless)
       this.outcome = outcome
       this.bannerShownAt = this.time.now
       this.player.setVelocity(0, 0)
-      // Nothing left to steer, and the banner is the thing to read now. ↻ stays
-      // where it is — on a phone it's the only way back to level 1.
+      // Nothing left to steer, and the banner is the thing to read now. The
+      // little buttons along the top stay where they are — on a phone they're
+      // the only way back to level 1, or to another go at this one.
       this.touchPad?.setThumbControlsVisible(false)
 
       // The clock stopped the instant `outcome` was set above, so this is his
       // real time for the level. Only a genuine record gets written down.
-      const result = recordTime(this.bestTimes, this.level.name, this.levelTimeMs)
+      const result = recordTime(this.bestTimes, this.recordKey, this.levelTimeMs)
       if (result.isNewBest) {
         this.bestTimes = result.times
         saveBestTimes(result.times)
@@ -643,7 +698,7 @@ export class GameScene extends Phaser.Scene {
   private refreshHud(): void {
     const total = this.level.coins.length
     this.shownTime = formatTime(this.levelTimeMs)
-    const best = bestTimeFor(this.bestTimes, this.level.name)
+    const best = bestTimeFor(this.bestTimes, this.recordKey)
 
     // Short lines, and only THREE of them. The HUD has to keep out of the way
     // of the player, and it has been in his way twice now: once sideways, when
@@ -671,7 +726,27 @@ function anyKeyDown(keys: Phaser.Input.Keyboard.Key[]): boolean {
   return keys.some((key) => key.isDown)
 }
 
-/** Did this key go down this frame? A key that doesn't exist never does. */
+/**
+ * Did this key go down this frame? A key that doesn't exist never does.
+ *
+ * A finger resting on a key is not one press. The browser sends "it went down"
+ * over and over while you lean on it — twenty-odd times a second — and each of
+ * those carries a flag saying it is a repeat rather than a new press.
+ *
+ * Normally Phaser sorts this out for us: it can see the key is already down, so
+ * the repeats change nothing. But R and N both restart the scene, and a restart
+ * throws away every key and builds new ones that believe they are up. So the
+ * very next repeat looks like somebody pressing the key for the first time, and
+ * the level restarts again, and again — leaning on N walked him from level 1 to
+ * level 25 in a second and a bit, and leaning on R pinned him to his starting
+ * spot with the clock stuck at zero, which looks exactly like the game freezing.
+ *
+ * Ignoring the repeats fixes both. The phone has been protected from this since
+ * the touch buttons were built (`justPressed` in `src/game/touchControls.ts`);
+ * this is the keyboard's half of the same promise.
+ */
 function justDown(key: Phaser.Input.Keyboard.Key | null): boolean {
-  return key !== null && Phaser.Input.Keyboard.JustDown(key)
+  if (key === null || !Phaser.Input.Keyboard.JustDown(key)) return false
+  const pressed = key.originalEvent as KeyboardEvent | undefined
+  return pressed?.repeat !== true
 }

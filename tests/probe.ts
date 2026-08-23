@@ -33,11 +33,26 @@ export type GameProbe = {
     setPosition(x: number, y: number): void
   }
   coins: { getChildren(): { x: number; y: number; active: boolean }[] }
+  /**
+   * The yellow rectangle you can SEE. The sprite the physics uses is invisible,
+   * so this is the one that says whether Pip got drawn at all.
+   */
+  playerSkin: { visible: boolean }
   /** The platforms that slide. Empty in a level where nothing moves. */
   movingPlatforms: { sprite: { x: number; y: number; displayHeight: number } }[]
+  /**
+   * Where the scene keeps the ledges it built: `platforms` for the ones that
+   * stay put, `movers` for the ones that slide. Looked up by the same names the
+   * scene stores them under.
+   */
+  data: { get(key: string): { getChildren(): unknown[] } | undefined }
   hud: { text: string }
   banner: { text: string }
-  level: { coins: unknown[]; platforms: unknown[] }
+  level: {
+    name: string
+    coins: { x: number; y: number }[]
+    platforms: { x: number; y: number; width: number; height: number }[]
+  }
   jumpState: { jumpsUsed: number }
   squashStartedAt: number
   levelTimeMs: number
@@ -168,6 +183,45 @@ export async function collectCoins(page: Page, limit = Number.POSITIVE_INFINITY)
       await nextFrame()
     }
   }, limit)
+}
+
+/**
+ * How much of the level made it onto the canvas.
+ *
+ * The counts in `level` are the level's *numbers*. These are the things the
+ * scene really built out of them, which is not the same question at all: a
+ * level can have thirty perfect ledges in its data and draw a black screen.
+ */
+export async function drawnCounts(
+  page: Page,
+): Promise<{ platforms: number; coins: number; player: boolean }> {
+  return page.evaluate(() => {
+    const scene = window.__GAME__?.scene.getScene('Game') as unknown as GameProbe
+    const still = scene.data.get('platforms')?.getChildren().length ?? 0
+    const sliding = scene.data.get('movers')?.getChildren().length ?? 0
+    return {
+      platforms: still + sliding,
+      coins: scene.coins.getChildren().length,
+      player: scene.playerSkin.visible,
+    }
+  })
+}
+
+/**
+ * The level's own shape, written down so two goes at it can be compared.
+ *
+ * A made-up level is made up from its number, so playing level 4 again has to
+ * hand back the very same level 4 — same name, same ledges, same coins. A
+ * generator that rolled fresh dice on the way in would show up here as a
+ * different string.
+ */
+export async function levelShape(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const scene = window.__GAME__?.scene.getScene('Game') as unknown as GameProbe
+    const ledges = scene.level.platforms.map((p) => `${p.x},${p.y},${p.width},${p.height}`)
+    const coins = scene.level.coins.map((coin) => `${coin.x},${coin.y}`)
+    return [scene.level.name, ...ledges, ...coins].join(' | ')
+  })
 }
 
 /** Collect every console error and page error, so a test can insist on none. */

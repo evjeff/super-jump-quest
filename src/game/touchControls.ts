@@ -4,16 +4,17 @@
  *
  * A phone has no keyboard, so the game draws its own buttons: ◀ ▶ down in the
  * bottom-left where a left thumb rests, JUMP in the bottom-right for the right
- * thumb, and a small ↻ up in the top-right corner, deliberately as far from
- * both thumbs as the screen allows.
+ * thumb, and a row of three little ones along the top-right edge, deliberately
+ * as far from both thumbs as the screen allows — ↻ start the whole game over,
+ * ↺ play this level again, ⏭ skip it.
  *
  * Everything here works in the game's own 960 × 540 coordinates, the same grid
  * the levels are drawn on. Phaser hands us finger positions already converted
  * into that grid, so this file never has to know how big the phone is.
  */
 
-/** The four things a finger can be on. */
-export type TouchControlId = 'left' | 'right' | 'jump' | 'restart'
+/** The six things a finger can be on. */
+export type TouchControlId = 'left' | 'right' | 'jump' | 'restart' | 'playAgain' | 'skip'
 
 /** One round button: where its middle is, and how far the edge is from there. */
 export interface TouchButton {
@@ -39,12 +40,25 @@ export interface TouchLayoutOptions {
   radius: number
   /** JUMP is the button you press most, so it gets to be bigger. */
   jumpRadius: number
-  /** The small ↻ in the corner. */
+  /** The little ones along the top: ↻ ↺ ⏭. They're all this size. */
   restartRadius: number
   /** How far the buttons sit in from the edge of the screen. */
   margin: number
-  /** Breathing room between ◀ and ▶ so a thumb can't press both at once. */
+  /**
+   * Breathing room between two buttons side by side, so a thumb can't press
+   * both at once. It sets the gap between ◀ and ▶, and the gaps along the top.
+   */
   directionGap: number
+  /**
+   * Is the skip button being drawn at all? It's `TUNING.debug.skipLevel`.
+   *
+   * Leave it out and the skip button is there. That's on purpose: the
+   * level-maker asks this same question when it works out where NOT to put a
+   * coin, and if switching the button off took its spot away, every made-up
+   * level would quietly come out a different shape — and every best time with
+   * it. Only the phone buttons themselves ever pass `false`.
+   */
+  showSkip?: boolean
 }
 
 /**
@@ -52,9 +66,14 @@ export interface TouchLayoutOptions {
  *
  * Both movement buttons go bottom-LEFT and jump goes bottom-RIGHT, which is how
  * a phone is held: the left thumb steers, the right thumb jumps, and neither
- * hand has to do two jobs. Restart goes to the top-right, the one corner no
- * thumb reaches by accident — the score is drawn in the top-left, so that
- * corner was taken anyway.
+ * hand has to do two jobs. The other three go along the top-RIGHT edge, the one
+ * strip no thumb reaches by accident — the score is drawn in the top-left, so
+ * that end was taken anyway. They are small so that brushing the top of the
+ * screen misses them: none of them is a button you want pressed by mistake.
+ *
+ * ↻ stays exactly where it has always been, right in the corner, and still
+ * means the same thing. The two new ones queue up beside it, in the order you
+ * reach for them: ↺ play this level again first, ⏭ skip it furthest out.
  */
 export function touchButtonLayout(options: TouchLayoutOptions): TouchButton[] {
   const { width, height, radius, jumpRadius, restartRadius, margin, directionGap } = options
@@ -62,7 +81,12 @@ export function touchButtonLayout(options: TouchLayoutOptions): TouchButton[] {
   const thumbRow = height - margin - radius
   const leftX = margin + radius
 
-  return [
+  // The top row is built from the corner inwards, so ↻ never moves.
+  const topRow = margin + restartRadius
+  const cornerX = width - margin - restartRadius
+  const nextAlong = restartRadius * 2 + directionGap
+
+  const buttons: TouchButton[] = [
     { id: 'left', x: leftX, y: thumbRow, radius, label: '◀' },
     { id: 'right', x: leftX + radius * 2 + directionGap, y: thumbRow, radius, label: '▶' },
     {
@@ -72,14 +96,21 @@ export function touchButtonLayout(options: TouchLayoutOptions): TouchButton[] {
       radius: jumpRadius,
       label: '▲',
     },
-    {
-      id: 'restart',
-      x: width - margin - restartRadius,
-      y: margin + restartRadius,
-      radius: restartRadius,
-      label: '↻',
-    },
+    { id: 'restart', x: cornerX, y: topRow, radius: restartRadius, label: '↻' },
+    { id: 'playAgain', x: cornerX - nextAlong, y: topRow, radius: restartRadius, label: '↺' },
   ]
+
+  if (options.showSkip ?? true) {
+    buttons.push({
+      id: 'skip',
+      x: cornerX - nextAlong * 2,
+      y: topRow,
+      radius: restartRadius,
+      label: '⏭',
+    })
+  }
+
+  return buttons
 }
 
 /** Is this point inside this button? Touching the very edge counts. */
@@ -119,10 +150,10 @@ export function pressedButtons(
 /**
  * Did this button go down *this frame*?
  *
- * Jumping and restarting happen once per press: holding JUMP down must not
- * spend all three jumps in three frames, and leaning on ↻ must not restart the
- * level over and over. Moving left and right is the opposite — that's a hold,
- * and it uses `pressedButtons` directly.
+ * Jumping and the three little top buttons happen once per press: holding JUMP
+ * down must not spend all three jumps in three frames, and leaning on ⏭ must
+ * not skip level after level after level. Moving left and right is the opposite
+ * — that's a hold, and it uses `pressedButtons` directly.
  */
 export function justPressed(
   previous: ReadonlySet<TouchControlId>,

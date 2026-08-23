@@ -24,6 +24,13 @@ import { TUNING } from '../tuning'
 /** Above every sprite, so a finger always has something to press. */
 const DEPTH = 1000
 
+/**
+ * The little ones along the top edge. They stay on screen while the finish
+ * banner is up — ↻ is the only way back to level 1 on a phone, and ↺ is how you
+ * take another run at the level you have just finished.
+ */
+const TOP_ROW: readonly TouchControlId[] = ['restart', 'playAgain', 'skip']
+
 /** What one button is made of: a ring, and the symbol inside it. */
 type ButtonArt = Phaser.GameObjects.Arc | Phaser.GameObjects.Text
 
@@ -47,13 +54,16 @@ export class TouchPad {
       restartRadius: TUNING.touch.restartButtonRadius,
       margin: TUNING.touch.edgeMargin,
       directionGap: TUNING.touch.directionGap,
+      // No ⏭ at all when skipping is switched off: a button that is drawn but
+      // does nothing is worse than no button.
+      showSkip: TUNING.debug.skipLevel,
     })
 
     for (const button of this.buttons) {
       const drawn = this.draw(button)
-      // Restart stays put while the finish banner is up — it's the only way
-      // back to level 1 on a phone. The thumb buttons get out of the way.
-      if (button.id !== 'restart') this.thumbControls.push(...drawn)
+      // The top row stays put while the finish banner is up. The thumb buttons
+      // get out of the way.
+      if (!TOP_ROW.includes(button.id)) this.thumbControls.push(...drawn)
     }
 
     // A finger already on the glass right now is NOT a new press.
@@ -98,7 +108,7 @@ export class TouchPad {
     return this.held.has(id)
   }
 
-  /** Did this button go down this frame? For jumping and restarting. */
+  /** Did this button go down this frame? For jumping and the top row. */
   wasJustPressed(id: TouchControlId): boolean {
     return justPressed(this.heldLastFrame, this.held, id)
   }

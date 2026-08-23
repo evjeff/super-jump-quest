@@ -12,3 +12,4 @@ new ADR supersedes the old one.
 | 2026-08-16 | [The game plays on a phone with drawn-on buttons, held sideways](20260816-touch-controls-for-phones/README.md) | Accepted |
 | 2026-08-17 | [Platforms move by clock time, and take their passenger with them](20260817-moving-platforms-level-3/README.md) | Accepted |
 | 2026-08-17 | [Artwork is drawn in code, not shipped as image files](20260817-artwork-drawn-in-code/README.md) | Accepted |
+| 2026-08-22 | [Levels after 3 are generated from the level number](20260822-random-endless-levels/README.md) | Proposed |

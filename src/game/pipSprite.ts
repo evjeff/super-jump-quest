@@ -43,6 +43,23 @@ export const PIP_WIDTH = 16
 /** How tall he is in squares. */
 export const PIP_HEIGHT = 24
 
+/**
+ * How many screen pixels one square of him is drawn as.
+ *
+ * It lives here, beside the grid, because the two only mean anything together:
+ * 16 × 24 squares at 2 pixels each is the 32 × 48 boy you see. `BootScene`
+ * draws him at this size and the level-maker keeps ledges wider than he is,
+ * both from `PIP_ON_SCREEN` below — so redrawing him a square taller in the
+ * grid above makes the generated levels give him room for it, on their own.
+ */
+export const PIP_PIXEL = 2
+
+/** How big he actually is on the 960 × 540 grid the levels are drawn on. */
+export const PIP_ON_SCREEN = {
+  width: PIP_WIDTH * PIP_PIXEL,
+  height: PIP_HEIGHT * PIP_PIXEL,
+}
+
 /** The names of the colours he's made of. Each one is a key of `colors.pip`. */
 export type PipColorName =
   | 'cap'

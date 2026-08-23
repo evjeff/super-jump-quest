@@ -3,10 +3,13 @@ import type { GameProbe } from './probe'
 import {
   banner,
   collectCoins,
+  drawnCounts,
   goToLevel,
   hud,
+  levelShape,
   levelTimeMs,
   playerIsGrounded,
+  playerX,
   playerY,
   waitForGameScene,
   watchForErrors,
@@ -231,7 +234,7 @@ test('finishing a level starts the next one, and finishing the last one wins', a
   await collectCoins(page)
   expect(await banner(page)).toContain('YOU WIN!')
 
-  await holdKey(page, 'KeyR')
+  await holdShiftKey(page, 'KeyR')
   await expect.poll(() => hud(page), { timeout: 5_000 }).toContain('LEVEL 1')
   expect(await hud(page)).toContain('SCORE 00000')
 
@@ -244,11 +247,171 @@ test('finishing a level starts the next one, and finishing the last one wins', a
 })
 
 /**
- * The page and the README both promise that R starts over. It has to work while
- * he is still playing, not only on the win screen — being stuck on a hard jump
- * with no way back except reloading the page is how a Saturday morning ends.
+ * The game does not end any more, and this is the test that says so in a real
+ * browser.
+ *
+ * Levels 4 and up are made up by `src/game/levelGen.ts` rather than drawn by
+ * hand, and every unit test in the world can pass while a made-up level draws
+ * nothing at all. So: win the hand-made game, walk out of the YOU WIN! screen
+ * into level 4, and prove level 4 has ledges, has coins, can be finished, and
+ * hands you a level 5.
  */
-test('R starts the game over in the middle of a level', async ({ page }) => {
+test('the game keeps going past level 3, into levels it made up itself', async ({ page }) => {
+  const consoleErrors = watchForErrors(page)
+
+  await page.goto('/')
+  await waitForGameScene(page)
+
+  // Straight to the last hand-made level; the full walk from level 1 is the
+  // test above.
+  await goToLevel(page, 2)
+  await collectCoins(page)
+
+  // Beating level 3 is still a win — and now the win points somewhere.
+  expect(await banner(page)).toContain('YOU WIN!')
+  expect(await banner(page)).toContain('press N for level 4')
+
+  await holdKey(page, 'KeyN')
+  await expect.poll(() => hud(page), { timeout: 5_000 }).toContain('LEVEL 4')
+
+  const level4 = await levelState(page)
+  expect(level4.platforms).toBeGreaterThan(0)
+  expect(level4.coinsInLevel).toBeGreaterThan(0)
+  expect(level4.coinsAlive).toBe(level4.coinsInLevel)
+  expect(level4.banner).toBe('')
+  expect(level4.hud).toContain('COINS 0/')
+
+  // A made-up level is an ordinary level: finish it and level 5 is waiting.
+  await collectCoins(page)
+  expect(await banner(page)).toContain('LEVEL 4 DONE!')
+
+  await holdKey(page, 'KeyN')
+  await expect.poll(() => hud(page), { timeout: 5_000 }).toContain('LEVEL 5')
+
+  const level5 = await levelState(page)
+  expect(level5.platforms).toBeGreaterThan(0)
+  expect(level5.coinsInLevel).toBeGreaterThan(0)
+
+  expect(consoleErrors).toEqual([])
+})
+
+/**
+ * A made-up level has to be a place, not a picture.
+ *
+ * The generator is unit tested to death, but every one of those tests is about
+ * a list of numbers. This is the one that opens level 4 in a real browser and
+ * asks the questions a nine-year-old asks by looking at the screen: are there
+ * ledges, are there coins, is Pip standing on something instead of dropping
+ * through the floor for ever, and does the HUD know what this level is called?
+ *
+ * It skips in with N rather than playing three levels first, because the walk
+ * from level 1 is its own test and everything it could go wrong at would go
+ * wrong before this test got started.
+ */
+test('a level the game made up is a real place, with real ground under him', async ({ page }) => {
+  const consoleErrors = watchForErrors(page)
+
+  await page.goto('/')
+  await waitForGameScene(page)
+
+  await skipToLevel(page, 4)
+
+  // The HUD names it, and a made-up level has a made-up name after the number.
+  expect(await hud(page)).toMatch(/LEVEL 4 \S/)
+
+  // He starts a little way up and falls; wait until he has landed on whatever
+  // the generator put under him. This is the check that a level made of ledges
+  // he cannot stand on would fail.
+  await expect.poll(() => playerIsGrounded(page), { timeout: 10_000 }).toBe(true)
+
+  // ...and landed on a ledge, not gone through the world. Below 700 he is in
+  // the pit and being put back at the start over and over.
+  expect(await playerY(page)).toBeLessThan(700)
+
+  const level4 = await levelState(page)
+  const drawn = await drawnCounts(page)
+
+  // Every ledge and every coin in the level's numbers is on the canvas.
+  expect(level4.platforms).toBeGreaterThan(0)
+  expect(level4.coinsInLevel).toBeGreaterThan(0)
+  expect(drawn.platforms).toBe(level4.platforms)
+  expect(drawn.coins).toBe(level4.coinsInLevel)
+  expect(drawn.player).toBe(true)
+  expect(level4.banner).toBe('')
+  expect(level4.hud).toContain('COINS 0/')
+
+  // And it is live: picking a coin up takes it off the screen and puts the
+  // points on the board. A drawing of a level would sit there doing neither.
+  await collectCoins(page, 1)
+  await expect.poll(() => hud(page), { timeout: 5_000 }).toContain('COINS 1/')
+  expect(await hud(page)).not.toContain('SCORE 00000')
+  const afterOneCoin = await levelState(page)
+  expect(afterOneCoin.coinsAlive).toBe(afterOneCoin.coinsInLevel - 1)
+
+  // The rest of them finish it, exactly like a level we drew ourselves.
+  await collectCoins(page)
+  expect(await banner(page)).toContain('LEVEL 4 DONE!')
+
+  expect(consoleErrors).toEqual([])
+})
+
+/**
+ * Another go at the level he is on, which is the button he asked for.
+ *
+ * The point of playing a level again is that it is the SAME level again: the
+ * coins he took are back where they were, the clock is at nought, and the
+ * ledges are the ledges he had just learnt. A made-up level is the one place
+ * that could get this wrong — it is built from its number every time it starts,
+ * so a generator that rolled fresh dice would quietly hand him a different
+ * level 4 and lose his best time along with it.
+ */
+test('playing a made-up level again gives back the same level, coins and all', async ({ page }) => {
+  const consoleErrors = watchForErrors(page)
+
+  await page.goto('/')
+  await waitForGameScene(page)
+
+  await skipToLevel(page, 4)
+  await expect.poll(() => playerIsGrounded(page), { timeout: 10_000 }).toBe(true)
+
+  const shapeBefore = await levelShape(page)
+  const arrivedWith = (await hud(page)).match(/SCORE (\d+)/)?.[1] ?? ''
+  expect(arrivedWith).not.toBe('')
+
+  // Take one coin and dawdle, so there is something to put back and something
+  // on the clock to wind down.
+  await collectCoins(page, 1)
+  await page.waitForTimeout(1200)
+  const played = await levelState(page)
+  expect(played.coinsAlive).toBe(played.coinsInLevel - 1)
+  expect(played.levelTimeMs).toBeGreaterThan(900)
+  expect(await hud(page)).not.toContain(`SCORE ${arrivedWith}`)
+
+  await holdKey(page, 'KeyR')
+  await expect.poll(() => hud(page), { timeout: 5_000 }).toContain(`SCORE ${arrivedWith}`)
+
+  const again = await levelState(page)
+  expect(again.hud).toContain('LEVEL 4')
+  // The coin he took is back on its hook...
+  expect(again.coinsAlive).toBe(again.coinsInLevel)
+  expect(again.hud).toContain('COINS 0/')
+  // ...the clock starts again from nought...
+  expect(again.levelTimeMs).toBeLessThan(600)
+  expect(again.hud).toContain('THIS LEVEL 0:00')
+  expect(again.banner).toBe('')
+  // ...and it is the same level 4, down to the last ledge.
+  expect(await levelShape(page)).toBe(shapeBefore)
+
+  expect(consoleErrors).toEqual([])
+})
+
+/**
+ * The page and the README both promise that SHIFT+R starts over. It has to work
+ * while he is still playing, not only on the win screen — being stuck on a hard
+ * jump with no way back except reloading the page is how a Saturday morning
+ * ends.
+ */
+test('SHIFT+R starts the game over in the middle of a level', async ({ page }) => {
   await page.goto('/')
   await expect
     .poll(() => page.evaluate(() => window.__GAME__?.scene.isActive('Game') ?? false), {
@@ -262,9 +425,64 @@ test('R starts the game over in the middle of a level', async ({ page }) => {
   expect(await hud(page)).not.toContain('SCORE 00000')
   expect(await banner(page)).toBe('')
 
-  await holdKey(page, 'KeyR')
+  await holdShiftKey(page, 'KeyR')
   await expect.poll(() => hud(page), { timeout: 5_000 }).toContain('SCORE 00000')
   expect(await hud(page)).toContain('LEVEL 1')
+})
+
+/**
+ * The two buttons he asked for by name: play this level again, and skip a level
+ * that is beating you.
+ *
+ * Both are keys here rather than the phone buttons, which `touch.spec.ts`
+ * covers. What only a real browser can show is that the level really is rebuilt
+ * as he arrived at it — coins back, clock at zero, score wound back — and that
+ * skipping leaves the record book untouched.
+ */
+test('R plays this level again, and N skips a level without writing a time', async ({ page }) => {
+  const consoleErrors = watchForErrors(page)
+
+  await page.goto('/')
+  await waitForGameScene(page)
+
+  // Two levels in, so there is a score to wind back to. Level 2 is arrived at
+  // with everything level 1 was worth.
+  await collectCoins(page)
+  await holdKey(page, 'KeyN')
+  await expect.poll(() => hud(page), { timeout: 5_000 }).toContain('LEVEL 2')
+  const arrivedWith = (await hud(page)).match(/SCORE (\d+)/)?.[1] ?? ''
+  expect(arrivedWith).not.toBe('')
+  expect(arrivedWith).not.toBe('000000')
+
+  await collectCoins(page, 1)
+  await page.waitForTimeout(700)
+  expect(await hud(page)).not.toContain(`SCORE ${arrivedWith}`)
+
+  // R: the same level over again, exactly as he walked into it.
+  await holdKey(page, 'KeyR')
+  await expect.poll(() => hud(page), { timeout: 5_000 }).toContain(`SCORE ${arrivedWith}`)
+  expect(await hud(page)).toContain('LEVEL 2')
+  expect(await hud(page)).toContain('THIS LEVEL 0:0')
+
+  const restarted = await levelState(page)
+  expect(restarted.coinsAlive).toBe(restarted.coinsInLevel)
+  expect(restarted.levelTimeMs).toBeLessThan(600)
+
+  // N in the middle of a level: straight on to level 3, without finishing.
+  await page.waitForTimeout(400)
+  await holdKey(page, 'KeyN')
+  await expect.poll(() => hud(page), { timeout: 5_000 }).toContain('LEVEL 3')
+  expect(await hud(page)).toContain(`SCORE ${arrivedWith}`)
+  expect(await banner(page)).toBe('')
+
+  // A skipped level is not a finished level, so nothing is written down for it.
+  // Level 1, which he really did finish on the way here, is in there — which is
+  // what makes the missing level 2 mean something.
+  const saved = await page.evaluate(() => localStorage.getItem('super-jump-quest.best-times'))
+  expect(saved).toContain('First Steps')
+  expect(saved).not.toContain('The Tall Tower')
+
+  expect(consoleErrors).toEqual([])
 })
 
 /**
@@ -668,6 +886,90 @@ async function holdKey(page: import('@playwright/test').Page, key: string): Prom
   await page.keyboard.down(key)
   await page.waitForTimeout(80)
   await page.keyboard.up(key)
+}
+
+/**
+ * Skip forward with N until the HUD says he is on the level asked for.
+ *
+ * From level 1, three taps and he is on level 4 — the first one nobody drew by
+ * hand. Playing there instead would mean finishing three levels first, and
+ * every one of them is somewhere else's test.
+ */
+async function skipToLevel(page: import('@playwright/test').Page, level: number): Promise<void> {
+  for (let next = 2; next <= level; next += 1) {
+    await holdKey(page, 'KeyN')
+    await expect.poll(() => hud(page), { timeout: 5_000 }).toContain(`LEVEL ${next}`)
+  }
+}
+
+test('leaning on N skips one level, not forty', async ({ page }) => {
+  await page.goto('/')
+  await waitForGameScene(page)
+  await expect.poll(() => hud(page), { timeout: 10_000 }).toContain('LEVEL 1')
+
+  // Nobody taps a key for one frame. A child rests a finger on it — and the
+  // browser then sends "N went down" over and over, twenty-odd times a second,
+  // for as long as the finger is there.
+  //
+  // Restarting the scene throws away the key object and builds a new one, so
+  // every one of those repeats can look like a brand-new press unless someone
+  // says otherwise. Without that, a resting finger walks him into level 40 and
+  // he has lost his place completely.
+  //
+  // The phone has been protected from exactly this since the touch buttons
+  // were built — see "leaning on ↻ starts the game over once" in touch.spec.ts.
+  // This is the keyboard's half of the same promise.
+  await leanOn(page, 'KeyN')
+
+  // Note the word boundary. "LEVEL 2" on its own also matches "LEVEL 25",
+  // which is roughly where a leaned-on N used to leave him.
+  await expect.poll(() => hud(page), { timeout: 5_000 }).toMatch(/LEVEL 2\b/)
+})
+
+test('leaning on R plays the level again once, and lets him get on with it', async ({ page }) => {
+  await page.goto('/')
+  await waitForGameScene(page)
+  await expect.poll(() => playerIsGrounded(page), { timeout: 10_000 }).toBe(true)
+
+  // Read the clock while the key is still held down. If every repeat restarted
+  // the level, the clock is being wound back to zero twenty times a second and
+  // he is pinned to his starting spot — which, to the person holding the key,
+  // is indistinguishable from the game having frozen.
+  const clockWhileHeld = await leanOn(page, 'KeyR', () => levelTimeMs(page))
+  expect(clockWhileHeld).toBeGreaterThan(500)
+
+  await holdKey(page, 'ArrowRight')
+  await page.waitForTimeout(200)
+  expect(await playerX(page)).toBeGreaterThan(80)
+})
+
+/**
+ * Hold a key down the way a child does, repeats and all.
+ *
+ * A real browser does not send ONE "key went down" when you rest a finger on a
+ * key — it sends a stream of them, twenty-odd a second, each marked as a
+ * repeat. `keyboard.down` on its own sends a single one, which is not what a
+ * resting finger looks like, so holding it that way tests nothing.
+ */
+async function leanOn<T>(
+  page: import('@playwright/test').Page,
+  key: string,
+  whileHeld?: () => Promise<T>,
+): Promise<T | undefined> {
+  for (let press = 0; press < 24; press += 1) {
+    await page.keyboard.down(key)
+    await page.waitForTimeout(50)
+  }
+  const measured = await whileHeld?.()
+  await page.keyboard.up(key)
+  return measured
+}
+
+/** The same, with SHIFT held down over the top of it. */
+async function holdShiftKey(page: import('@playwright/test').Page, key: string): Promise<void> {
+  await page.keyboard.down('Shift')
+  await holdKey(page, key)
+  await page.keyboard.up('Shift')
 }
 
 async function notesPlayed(page: import('@playwright/test').Page): Promise<number> {
