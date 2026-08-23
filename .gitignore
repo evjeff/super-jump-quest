@@ -24,3 +24,6 @@ pnpm-debug.log*
 
 # Claude Code scratch worktrees (agent-local, never committed)
 .claude/worktrees/
+
+# aos agent workspace: worktrees, launch config, session state (machine-local)
+.aos/
